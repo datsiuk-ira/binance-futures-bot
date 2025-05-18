@@ -12,3 +12,4 @@ node_modules/
 frontend/.next/
 frontend/out/
 frontend/dist/
+.idea
