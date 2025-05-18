@@ -1,0 +1,15 @@
+Django>=5.0
+djangorestframework>=3.14.0
+django-environ>=0.12
+psycopg2-binary>=2.9
+celery>=5.2
+redis>=5.0
+python-binance>=1.0.28
+pandas>=2.2.0
+numpy>=1.26
+statsmodels>=0.14
+channels>=4.0
+uvicorn[standard]>=0.29
+gunicorn>=21.2.0
+drf-yasg>=1.21
+django-cors-headers>=4.0
