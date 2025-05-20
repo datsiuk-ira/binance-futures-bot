@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import environ
 from pathlib import Path
 from django.utils.translation import gettext_lazy as _
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,6 +30,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -36,22 +38,23 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
+    'rest_framework_simplejwt',
     "channels",
-    "api",
-    "arima",
-    "binance_connector",
-    "bot",
-    "celery_tasks",
-    "indicators",
-    "strategies",
-    "trades",
-    "websocket",
-    "users",
     'corsheaders',
+    'api.apps.ApiConfig',
+    'arima.apps.ArimaConfig',
+    'binance_connector.apps.BinanceConnectorConfig',
+    'bot.apps.BotConfig',
+    'celery_tasks.apps.CeleryTasksConfig',
+    'indicators.apps.IndicatorsConfig',
+    'strategies.apps.StrategiesConfig',
+    'trades.apps.TradesConfig',
+    'users.apps.UsersConfig',
+    'websocket.apps.WebsocketConfig',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', # Має бути якомога вище, особливо перед CommonMiddleware
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
@@ -113,15 +116,23 @@ CELERY_TASK_SERIALIZER = "json"
 
 
 # Channels (WebSocket)
-ASGI_APPLICATION = "backend.asgi.application"
+ASGI_APPLICATION = 'backend.asgi.application'
+REDIS_URL = env('REDIS_URL')
+
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [env("REDIS_URL")],
-        },
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             # "hosts": [REDIS_URL], # Використовуйте один рядок URL для Redis
+#             "hosts": [('redis', 6379)], # Або так, якщо REDIS_URL не використовується
+#         },
+#     },
+# }
 
 
 # Password validation
@@ -184,3 +195,13 @@ LOCALE_PATHS = [
 USE_I18N = True
 USE_L10N = True # Для форматування дат/чисел відповідно до локалі
 USE_TZ = True
+
+
+# Binance API Settings
+BINANCE_API_KEY = config('BINANCE_API_KEY')
+BINANCE_SECRET_KEY = config('BINANCE_SECRET_KEY')
+USE_BINANCE_TESTNET = config('USE_BINANCE_TESTNET', default=True, cast=bool)
+
+BINANCE_FUTURES_TESTNET_URL = 'https://testnet.binancefuture.com/fapi' # Для Futures Testnet
+BINANCE_FUTURES_MAINNET_URL = 'https://fapi.binance.com/fapi'       # Для Futures Mainnet
+

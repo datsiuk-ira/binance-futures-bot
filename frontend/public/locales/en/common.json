@@ -26,6 +26,7 @@
     "confirmPasswordRequired": "Please confirm your password.",
     "passwordsDoNotMatch": "Passwords do not match."
   },
+  "Profile": "Profile",
   "profile": {
     "title": "User Profile",
     "welcome": "Welcome, {{email}}!",
@@ -61,6 +62,15 @@
   "error.noActiveAccount": "No active account found with the given credentials.",
   "signUp.successfulAndLoggedIn": "Registration successful! You are now logged in.",
   "signUp.successfulPleaseLogin": "Registration successful! Please log in.",
-  "signUp.failedDefault": "Sign up failed. Please try again."
-
+  "signUp.failedDefault": "Sign up failed. Please try again.",
+  "dashboard": "Dashboard",
+  "appName": "Home",
+  "dashboardPage.title": "Market Data Overview (Binance Futures Testnet)",
+  "dashboardPage.symbolLabel": "Symbol",
+  "dashboardPage.intervalLabel": "Interval",
+  "dashboardPage.limitLabel": "Limit",
+  "dashboardPage.updateButton": "Update",
+  "dashboardPage.loginRequired": "Please log in to access the information panel.",
+  "dashboardPage.noDataForSymbol": "No data available for this symbol/interval.",
+  "dashboardPage.klineChartTitle": "Klines Chart"
 }

@@ -26,6 +26,7 @@
     "confirmPasswordRequired": "Будь ласка, підтвердіть ваш пароль.",
     "passwordsDoNotMatch": "Паролі не співпадають."
   },
+  "Profile": "Профіль",
   "profile": {
     "title": "Профіль користувача",
     "welcome": "Ласкаво просимо, {{email}}!",
@@ -61,5 +62,15 @@
   "error.noActiveAccount": "Активного облікового запису з такими даними не знайдено або невірний пароль.",
   "signUp.successfulAndLoggedIn": "Реєстрація успішна! Ви увійшли в систему.",
   "signUp.successfulPleaseLogin": "Реєстрація успішна! Будь ласка, увійдіть.",
-  "signUp.failedDefault": "Помилка реєстрації. Будь ласка, спробуйте знову."
+  "signUp.failedDefault": "Помилка реєстрації. Будь ласка, спробуйте знову.",
+  "dashboard": "Інформаційна панель",
+  "appName": "Головна",
+  "dashboardPage.title": "Інформаційна панель ринкових даних (Binance Futures Testnet)",
+  "dashboardPage.symbolLabel": "Символ",
+  "dashboardPage.intervalLabel": "Інтервал",
+  "dashboardPage.limitLabel": "Ліміт",
+  "dashboardPage.updateButton": "Оновити",
+  "dashboardPage.loginRequired": "Будь ласка, увійдіть для доступу до інформаційної панелі.",
+  "dashboardPage.noDataForSymbol": "Немає доступних даних для цього символу/інтервалу.",
+  "dashboardPage.klineChartTitle": "Графік Klines"
 }
