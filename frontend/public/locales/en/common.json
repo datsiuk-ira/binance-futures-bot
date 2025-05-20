@@ -58,5 +58,9 @@
   "error.incorrectPassword": "Incorrect password provided for this email.",
   "error.emailDoesNotExist": "User with this email does not exist.",
   "login.emailDoesNotExistSuggestion": "This email is not registered. Would you like to sign up?",
-  "error.noActiveAccount": "No active account found with the given credentials."
+  "error.noActiveAccount": "No active account found with the given credentials.",
+  "signUp.successfulAndLoggedIn": "Registration successful! You are now logged in.",
+  "signUp.successfulPleaseLogin": "Registration successful! Please log in.",
+  "signUp.failedDefault": "Sign up failed. Please try again."
+
 }

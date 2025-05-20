@@ -58,5 +58,8 @@
   "error.incorrectPassword": "Введено неправильний пароль для цього email.",
   "error.emailDoesNotExist": "Користувача з таким email не існує.",
   "login.emailDoesNotExistSuggestion": "Цей email не зареєстровано. Бажаєте створити обліковий запис?",
-  "error.noActiveAccount": "Активного облікового запису з такими даними не знайдено або невірний пароль."
+  "error.noActiveAccount": "Активного облікового запису з такими даними не знайдено або невірний пароль.",
+  "signUp.successfulAndLoggedIn": "Реєстрація успішна! Ви увійшли в систему.",
+  "signUp.successfulPleaseLogin": "Реєстрація успішна! Будь ласка, увійдіть.",
+  "signUp.failedDefault": "Помилка реєстрації. Будь ласка, спробуйте знову."
 }

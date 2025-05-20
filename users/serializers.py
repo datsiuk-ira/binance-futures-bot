@@ -1,20 +1,47 @@
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from .models import User
 
 
 class RegisterSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True, required=False)
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[validate_password],
+        style={'input_type': 'password'}
+    )
+    # Add fields to return tokens
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
 
     class Meta:
         model = User
-        fields = ('email', 'password', 'password2')
+        fields = ('email', 'password', 'password2', 'access', 'refresh')
         extra_kwargs = {
             'password': {'write_only': True},
+            'email': {
+                'error_messages': {
+                    'unique': _("A user with this email already exists. Please log in or use a different email.")
+                }
+            }
         }
+
+    def to_representation(self, instance):
+        # This method is called when serializer.data is accessed
+        representation = super().to_representation(instance)
+        refresh = RefreshToken.for_user(instance)
+        representation['refresh'] = str(refresh)
+        representation['access'] = str(refresh.access_token)
+        # We don't want to send the password back
+        representation.pop('password', None)
+        return representation
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
@@ -35,7 +62,15 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop("password2", None)
-        return User.objects.create_user(**validated_data)
+        user = User.objects.create_user(**validated_data)
+
+        # Generate tokens for the new user
+        refresh = RefreshToken.for_user(user)
+        validated_data['refresh'] = str(refresh)
+        validated_data['access'] = str(refresh.access_token)
+        self.instance = user
+
+        return user
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
