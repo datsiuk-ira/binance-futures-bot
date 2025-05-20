@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../api/auth";
-import AuthForm from "../componets/AuthForm";
+import AuthForm from "../components/AuthForm";
 import { toast } from 'react-toastify';
+import {t} from "i18next";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -16,28 +17,25 @@ export default function Login() {
       const response = await login({ email, password });
       localStorage.setItem("accessToken", response.data.access);
       localStorage.setItem("refreshToken", response.data.refresh);
-      toast.success("Login successful!");
+      toast.success(t('login.successful')); // This can also be translated if needed
       navigate("/profile");
     } catch (error: any) {
       console.error("Login failed:", error);
-      let errorMessage = "Login failed. Please check your credentials or try again later.";
+      let errorMessage = "An unexpected error occurred. Please try again."; // Default/fallback error
       if (error.response && error.response.data && error.response.data.detail) {
-        errorMessage = error.response.data.detail;
+        errorMessage = error.response.data.detail; // Error from backend
       } else if (error.message) {
-        errorMessage = error.message;
+        errorMessage = error.message; // Network error or other client-side error
       }
       setFormError(errorMessage);
-      toast.error(errorMessage, { autoClose: false });
     } finally {
       setIsLoading(false);
     }
   };
 
-  return <AuthForm
-            onSubmit={handleLogin}
-            submitText="Login"
-            isLoading={isLoading}
-            formError={formError}
-            setFormError={setFormError}
-        />;
+  const clearFormError = () => {
+    setFormError(null);
+  }
+
+  return <AuthForm onSubmit={handleLogin} submitTextKey="login.submitButton" isLoading={isLoading} formError={formError} clearFormError={clearFormError} />;
 }

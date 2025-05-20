@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Binance Bot\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-05-19 23:03+0000\n"
+"PO-Revision-Date: 2025-05-19 23:10+0000\n"
+"Last-Translator: Oleksii Datsiuk <you@example.com>\n"
+"Language-Team: Ukrainian <uk@li.org>\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || n%10>=5 || (n%100>=11 && n%100<=14) ? 2 : 3);\n"
+
+#: backend/settings.py:177
+msgid "English"
+msgstr "Англійська"
+
+#: backend/settings.py:178
+msgid "Ukrainian"
+msgstr "Українська"
+
+#: users/admin.py:17
+msgid "Personal info"
+msgstr "Особиста інформація"
+
+#: users/admin.py:18
+msgid "Trade Settings"
+msgstr "Налаштування торгівлі"
+
+#: users/admin.py:19
+msgid "Binance API"
+msgstr "Binance API"
+
+#: users/admin.py:21
+msgid "Permissions"
+msgstr "Дозволи"
+
+#: users/admin.py:32
+msgid "Important dates"
+msgstr "Важливі дати"

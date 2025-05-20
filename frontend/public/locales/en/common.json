@@ -1,0 +1,62 @@
+{
+  "login": {
+    "title": "Login",
+    "submitButton": "Login",
+    "dontHaveAccount": "Don't have an account?",
+    "credentialErrorSuggestion": "User not found or incorrect password. Don't have an account?",
+    "link": "Login"
+  },
+  "signUp": {
+    "title": "Sign Up",
+    "submitButton": "Sign Up",
+    "alreadyHaveAccount": "Already have an account?",
+    "link": "Sign Up",
+    "success": "Registration successful! You are now logged in."
+  },
+  "form": {
+    "emailLabel": "Email Address",
+    "passwordLabel": "Password",
+    "confirmPasswordLabel": "Confirm Password"
+  },
+  "validation": {
+    "emailRequired": "Email is required.",
+    "emailInvalid": "Invalid email format.",
+    "passwordRequired": "Password is required.",
+    "passwordTooShort": "Password must be at least {{minLength}} characters long.",
+    "confirmPasswordRequired": "Please confirm your password.",
+    "passwordsDoNotMatch": "Passwords do not match."
+  },
+  "profile": {
+    "title": "User Profile",
+    "welcome": "Welcome, {{email}}!",
+    "logoutButton": "Logout",
+    "email": "Email",
+    "balance": "Balance",
+    "leverage": "Leverage",
+    "riskPerTrade": "Risk per Trade",
+    "tradeMode": "Trade Mode",
+    "apiKeyConfigured": "Configured",
+    "apiKeyNotConfigured": "Not Configured",
+    "errorLoading": "Failed to load profile data.",
+    "logoutSuccess": "You have been logged out successfully.",
+    "apiKeyStatus": "API Key Status",
+    "errorLoadingFallback": "Something went wrong while loading profile data."
+  },
+  "error": {
+      "network": "Network error. Please check your connection and try again."
+  },
+  "No active account found with the given credentials": "No active account found with the given credentials.",
+  "signUp.emailExistsSuggestion": "This email is already registered. Would you like to log in?",
+  "login.successful": "Login successful!",
+  "tradeModes": {
+    "analytics": "Analytics",
+    "auto": "Auto",
+    "semi": "Semi-Auto"
+  },
+  "login.emailDoesNotExistSuggestion": "This email is not registered. Would you like to sign up?",
+  "User with this email does not exist.": "User with this email does not exist.",
+  "error.incorrectPassword": "Incorrect password provided for this email.",
+  "error.emailDoesNotExist": "User with this email does not exist.",
+  "login.emailDoesNotExistSuggestion": "This email is not registered. Would you like to sign up?",
+  "error.noActiveAccount": "No active account found with the given credentials."
+}

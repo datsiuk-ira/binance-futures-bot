@@ -3,13 +3,15 @@ import {Routes, Route, Navigate} from "react-router-dom";
 import Login from "./pages/login";
 import SignUp from "./pages/sign_up";
 import Profile from "./pages/profile";
-import PrivateRoute from "./componets/PrivateRoute";
+import PrivateRoute from "./components/PrivateRoute";
 import {ToastContainer} from 'react-toastify'; // Імпорт
 import 'react-toastify/dist/ReactToastify.css'; // Імпорт стилів
+import LanguageSwitcher from './components/LanguageSwitcher';
 
 function App() {
     return (
         <> {/* Обгортка для ToastContainer та Routes */}
+            <LanguageSwitcher /> {/* Додано перемикач */}
             <ToastContainer position="top-right"
                             autoClose={5000}
                             hideProgressBar={false}

@@ -1,0 +1,62 @@
+{
+  "login": {
+    "title": "Вхід",
+    "submitButton": "Увійти",
+    "dontHaveAccount": "Немає облікового запису?",
+    "credentialErrorSuggestion": "Користувача не знайдено або невірний пароль. Немає облікового запису?",
+    "link": "Вхід"
+  },
+  "signUp": {
+    "title": "Реєстрація",
+    "submitButton": "Зареєструватися",
+    "alreadyHaveAccount": "Вже є обліковий запис?",
+    "link": "Реєстрація",
+    "success": "Реєстрація успішна! Ви увійшли до системи."
+  },
+  "form": {
+    "emailLabel": "Адреса електронної пошти",
+    "passwordLabel": "Пароль",
+    "confirmPasswordLabel": "Підтвердіть пароль"
+  },
+  "validation": {
+    "emailRequired": "Електронна пошта обов'язкова.",
+    "emailInvalid": "Неправильний формат електронної пошти.",
+    "passwordRequired": "Пароль обов'язковий.",
+    "passwordTooShort": "Пароль має містити щонайменше {{minLength}} символів.",
+    "confirmPasswordRequired": "Будь ласка, підтвердіть ваш пароль.",
+    "passwordsDoNotMatch": "Паролі не співпадають."
+  },
+  "profile": {
+    "title": "Профіль користувача",
+    "welcome": "Ласкаво просимо, {{email}}!",
+    "logoutButton": "Вийти",
+    "email": "Електронна пошта",
+    "balance": "Баланс",
+    "leverage": "Кредитне плече",
+    "riskPerTrade": "Ризик на угоду",
+    "tradeMode": "Режим торгівлі",
+    "apiKeyConfigured": "Налаштовано",
+    "apiKeyNotConfigured": "Не налаштовано",
+    "errorLoading": "Не вдалося завантажити дані профілю.",
+    "logoutSuccess": "Ви успішно вийшли з облікового запису.",
+    "apiKeyStatus": "Статус API ключа",
+    "errorLoadingFallback": "Щось пішло не так під час завантаження даних профілю."
+  },
+  "error": {
+    "network": "Помилка мережі. Перевірте з'єднання та спробуйте знову."
+  },
+  "No active account found with the given credentials": "Активного облікового запису з такими даними не знайдено.",
+  "signUp.emailExistsSuggestion": "Цей email вже зареєстровано. Бажаєте увійти?",
+  "login.successful": "Вхід успішний!",
+  "tradeModes": {
+    "analytics": "Аналітика",
+    "auto": "Автоматичний",
+    "semi": "Напівавтоматичний"
+  },
+  "login.emailDoesNotExistSuggestion": "Цей email не зареєстровано. Бажаєте створити обліковий запис?",
+  "User with this email does not exist.": "Користувача з таким email не існує.",
+  "error.incorrectPassword": "Введено неправильний пароль для цього email.",
+  "error.emailDoesNotExist": "Користувача з таким email не існує.",
+  "login.emailDoesNotExistSuggestion": "Цей email не зареєстровано. Бажаєте створити обліковий запис?",
+  "error.noActiveAccount": "Активного облікового запису з такими даними не знайдено або невірний пароль."
+}
