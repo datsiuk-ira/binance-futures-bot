@@ -72,5 +72,69 @@
   "dashboardPage.updateButton": "Update",
   "dashboardPage.loginRequired": "Please log in to access the information panel.",
   "dashboardPage.noDataForSymbol": "No data available for this symbol/interval.",
-  "dashboardPage.klineChartTitle": "Klines Chart"
+  "dashboardPage.klineChartTitle": "Klines Chart",
+  "dashboard.indicatorSettings.title": "Indicator Settings",
+  "dashboard.riskManagement.title": "Risk Management",
+  "dashboard.tradeProposals.reasons.emaCrossBuy": "EMA(9) crossed above EMA(21), RSI ({{rsi}}) < 70.",
+  "Dashboard": "Dashboard",
+  "dashboard": {
+    "title": "Dashboard",
+    "controls": {
+      "symbol": "Symbol",
+      "timeframe": "Timeframe",
+      "limit": "Candles Limit",
+      "autoTrade": "Auto-Trade",
+      "refresh": "Refresh"
+    },
+    "tradeProposals": {
+      "title": "Trade Proposals",
+      "entry": "Entry",
+      "sl": "Stop-Loss",
+      "tp": "Take-Profit",
+      "reason": "Reason",
+      "execute": "Execute",
+      "reject": "Reject"
+    },
+    "riskManagement": {
+      "title": "Risk Management",
+      "leverage": "Leverage",
+      "stopLoss": "Stop-Loss (%)",
+      "takeProfit": "Take-Profit (%)",
+      "trailingStop": "Trailing Stop",
+      "maxDailyLoss": "Max Daily Loss (%)"
+    },
+    "openPositions": {
+      "title": "Open Positions",
+      "noPositions": "No open positions at the moment."
+    },
+    "balanceInfo": {
+      "title": "Balance Information",
+      "totalBalance": "Total Balance",
+      "availableBalance": "Available Balance"
+    },
+    "noData": "No data to display.",
+    "tooltips": {
+      "botMode": "Enables/disables automatic trading based on signals.",
+      "leverage": "Multiplier for your position. Increases potential profit and loss.",
+      "stopLoss": "Percentage from entry price to automatically close a losing trade.",
+      "takeProfit": "Percentage from entry price to automatically close a profitable trade.",
+      "trailingStop": "Dynamic stop-loss that follows the price, protecting profits.",
+      "maxDailyLoss": "Maximum allowed percentage of capital loss per day."
+    }
+  },
+  "timeframes": {
+    "1m": "1 minute",
+    "5m": "5 minutes",
+    "15m": "15 minutes",
+    "30m": "30 minutes",
+    "1h": "1 hour",
+    "2h": "2 hours",
+    "4h": "4 hours",
+    "1d": "1 day",
+    "1w": "1 week",
+    "1M": "1 month"
+  },
+  "errors": {
+    "fetchKlinesFailed": "Failed to load kline data."
+  }
 }

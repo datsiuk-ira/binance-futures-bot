@@ -45,7 +45,7 @@ const AppContent: React.FC = () => {
                         {isAuthenticated ? (
                             <>
                                 <Button color="inherit" component={RouterLink} to="/dashboard" sx={{ ml: 1 }}>
-                                    {t('dashboard')}
+                                    {t('Dashboard')}
                                 </Button>
                                 <Button color="inherit" component={RouterLink} to="/profile" sx={{ ml: 1 }}>
                                     {t('Profile')}
