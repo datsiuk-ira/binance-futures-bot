@@ -1,88 +1,96 @@
 {
+  "appName": "Trading Bot",
+  "navbar": {
+    "appName": "Trading Bot",
+    "dashboard": "Dashboard",
+    "profile": "Profile",
+    "login": "Login",
+    "logout": "Logout",
+    "signUp": "Sign Up"
+  },
+  "home": {
+    "welcomeTitle": "Welcome to the Trading Bot",
+    "welcomeSubtitle": "Please login or sign up to continue.",
+    "goToDashboard": "Go to Dashboard"
+  },
   "login": {
     "title": "Login",
     "submitButton": "Login",
     "dontHaveAccount": "Don't have an account?",
     "credentialErrorSuggestion": "User not found or incorrect password. Don't have an account?",
-    "link": "Login"
+    "link": "Login",
+    "successful": "Login successful!",
+    "emailDoesNotExistSuggestion": "This email is not registered. Would you like to create an account?",
+    "failed": "Login failed. Please check your credentials."
   },
   "signUp": {
     "title": "Sign Up",
     "submitButton": "Sign Up",
     "alreadyHaveAccount": "Already have an account?",
     "link": "Sign Up",
-    "success": "Registration successful! You are now logged in."
+    "success": "Registration successful! You are logged in.",
+    "emailExistsSuggestion": "This email is already registered. Would you like to log in?",
+    "successfulAndLoggedIn": "Registration successful! You are logged in.",
+    "successfulPleaseLogin": "Registration successful! Please log in.",
+    "failedDefault": "Registration failed. Please try again."
   },
   "form": {
     "emailLabel": "Email Address",
     "passwordLabel": "Password",
-    "confirmPasswordLabel": "Confirm Password"
+    "confirmPasswordLabel": "Confirm Password",
+    "firstNameLabel": "First Name",
+    "lastNameLabel": "Last Name"
   },
   "validation": {
     "emailRequired": "Email is required.",
     "emailInvalid": "Invalid email format.",
     "passwordRequired": "Password is required.",
-    "passwordTooShort": "Password must be at least {{minLength}} characters long.",
+    "passwordTooShort": "Password must be at least {{minLength}} characters.",
     "confirmPasswordRequired": "Please confirm your password.",
-    "passwordsDoNotMatch": "Passwords do not match."
+    "passwordsDoNotMatch": "Passwords do not match.",
+    "fieldRequired": "This field is required"
   },
   "Profile": "Profile",
   "profile": {
     "title": "User Profile",
     "welcome": "Welcome, {{email}}!",
     "logoutButton": "Logout",
+    "id": "ID",
     "email": "Email",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "dateJoined": "Date Joined",
+    "lastLogin": "Last Login",
     "balance": "Balance",
     "leverage": "Leverage",
     "riskPerTrade": "Risk per Trade",
-    "tradeMode": "Trade Mode",
+    "tradeMode": "Trading Mode",
     "apiKeyConfigured": "Configured",
     "apiKeyNotConfigured": "Not Configured",
     "errorLoading": "Failed to load profile data.",
-    "logoutSuccess": "You have been logged out successfully.",
+    "logoutSuccess": "You have successfully logged out.",
     "apiKeyStatus": "API Key Status",
-    "errorLoadingFallback": "Something went wrong while loading profile data."
+    "errorLoadingFallback": "Something went wrong while loading profile data.",
+    "updateProfileButton": "Update Profile",
+    "updateSuccess": "Profile updated successfully!",
+    "updateFailed": "Failed to update profile."
   },
-  "error": {
-      "network": "Network error. Please check your connection and try again."
+  "dashboardPage": {
+    "title": "Market Data Dashboard (Binance Futures Testnet)",
+    "symbolLabel": "Symbol",
+    "intervalLabel": "Interval",
+    "limitLabel": "Limit",
+    "updateButton": "Update",
+    "loginRequired": "Please login to access the dashboard.",
+    "noDataForSymbol": "No data available for this symbol/interval.",
+    "klineChartTitle": "Chart"
   },
-  "No active account found with the given credentials": "No active account found with the given credentials.",
-  "signUp.emailExistsSuggestion": "This email is already registered. Would you like to log in?",
-  "login.successful": "Login successful!",
-  "tradeModes": {
-    "analytics": "Analytics",
-    "auto": "Auto",
-    "semi": "Semi-Auto"
-  },
-  "login.emailDoesNotExistSuggestion": "This email is not registered. Would you like to sign up?",
-  "User with this email does not exist.": "User with this email does not exist.",
-  "error.incorrectPassword": "Incorrect password provided for this email.",
-  "error.emailDoesNotExist": "User with this email does not exist.",
-  "login.emailDoesNotExistSuggestion": "This email is not registered. Would you like to sign up?",
-  "error.noActiveAccount": "No active account found with the given credentials.",
-  "signUp.successfulAndLoggedIn": "Registration successful! You are now logged in.",
-  "signUp.successfulPleaseLogin": "Registration successful! Please log in.",
-  "signUp.failedDefault": "Sign up failed. Please try again.",
-  "dashboard": "Dashboard",
-  "appName": "Home",
-  "dashboardPage.title": "Market Data Overview (Binance Futures Testnet)",
-  "dashboardPage.symbolLabel": "Symbol",
-  "dashboardPage.intervalLabel": "Interval",
-  "dashboardPage.limitLabel": "Limit",
-  "dashboardPage.updateButton": "Update",
-  "dashboardPage.loginRequired": "Please log in to access the information panel.",
-  "dashboardPage.noDataForSymbol": "No data available for this symbol/interval.",
-  "dashboardPage.klineChartTitle": "Klines Chart",
-  "dashboard.indicatorSettings.title": "Indicator Settings",
-  "dashboard.riskManagement.title": "Risk Management",
-  "dashboard.tradeProposals.reasons.emaCrossBuy": "EMA(9) crossed above EMA(21), RSI ({{rsi}}) < 70.",
-  "Dashboard": "Dashboard",
   "dashboard": {
     "title": "Dashboard",
     "controls": {
       "symbol": "Symbol",
       "timeframe": "Timeframe",
-      "limit": "Candles Limit",
+      "limit": "Candle Limit",
       "autoTrade": "Auto-Trade",
       "refresh": "Refresh"
     },
@@ -105,7 +113,7 @@
     },
     "openPositions": {
       "title": "Open Positions",
-      "noPositions": "No open positions at the moment."
+      "noPositions": "No open positions currently."
     },
     "balanceInfo": {
       "title": "Balance Information",
@@ -119,8 +127,19 @@
       "stopLoss": "Percentage from entry price to automatically close a losing trade.",
       "takeProfit": "Percentage from entry price to automatically close a profitable trade.",
       "trailingStop": "Dynamic stop-loss that follows the price, protecting profits.",
-      "maxDailyLoss": "Maximum allowed percentage of capital loss per day."
-    }
+      "maxDailyLoss": "Maximum allowable percentage loss of capital per day."
+    },
+    "websocketStatus": "WebSocket Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "websocketError": "WebSocket Error",
+    "loadingChartData": "Loading chart data...",
+    "noDataForChart": "No data available to display chart, or data is still loading.",
+    "selectSymbolInterval": "Please select a symbol and interval to display the chart.",
+    "status": "Status",
+    "connecting": "Connecting...",
+    "polling": "Polling API for updates...",
+    "reconnectWs": "Reconnect WebSocket"
   },
   "timeframes": {
     "1m": "1 minute",
@@ -134,7 +153,24 @@
     "1w": "1 week",
     "1M": "1 month"
   },
+  "tradeModes": {
+    "analytics": "Analytics",
+    "auto": "Automatic",
+    "semi": "Semi-Automatic"
+  },
+  "languageSwitcher": {
+    "language": "Language",
+    "english": "English",
+    "ukrainian": "Ukrainian"
+  },
   "errors": {
-    "fetchKlinesFailed": "Failed to load kline data."
-  }
+    "network": "Network error. Please check your connection and try again.",
+    "generic": "An unexpected error occurred. Please try again later.",
+    "fetchKlinesFailed": "Failed to load kline data.",
+    "incorrectPassword": "Password entered is incorrect for this email.",
+    "emailDoesNotExist": "User with this email does not exist.",
+    "noActiveAccount": "No active account found with the given credentials or incorrect password."
+  },
+  "No active account found with the given credentials": "No active account found with the given credentials.",
+  "User with this email does not exist.": "User with this email does not exist."
 }

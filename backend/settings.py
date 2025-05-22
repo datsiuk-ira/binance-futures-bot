@@ -202,6 +202,11 @@ BINANCE_API_KEY = config('BINANCE_API_KEY')
 BINANCE_SECRET_KEY = config('BINANCE_SECRET_KEY')
 USE_BINANCE_TESTNET = config('USE_BINANCE_TESTNET', default=True, cast=bool)
 
-BINANCE_FUTURES_TESTNET_URL = 'https://testnet.binancefuture.com/fapi' # Для Futures Testnet
-BINANCE_FUTURES_MAINNET_URL = 'https://fapi.binance.com/fapi'       # Для Futures Mainnet
+BINANCE_FUTURES_API_BASE_URL = config('BINANCE_FUTURES_API_BASE_URL', default='https://fapi.binance.com')
+BINANCE_FUTURES_WS_BASE_URL = config('BINANCE_FUTURES_WS_BASE_URL', default='wss://fstream.binance.com')
 
+# Maximum number of klines to keep in memory for indicator calculations in WebSocket consumer
+MAX_KLINES_MEMORY_FOR_INDICATORS = config('MAX_KLINES_MEMORY_FOR_INDICATORS', default=500, cast=int)
+
+# Maximum number of klines to fetch for historical data API endpoint
+MAX_KLINES_HISTORICAL_FETCH = config('MAX_KLINES_HISTORICAL_FETCH', default=1000, cast=int)

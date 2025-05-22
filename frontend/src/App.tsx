@@ -41,7 +41,9 @@ const AppContent: React.FC = () => {
 
                     {/* Group for right-aligned items */}
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <LanguageSwitcher />
+                        <Box sx={{ ml: 'auto' }}>
+                            <LanguageSwitcher />
+                        </Box>
                         {isAuthenticated ? (
                             <>
                                 <Button color="inherit" component={RouterLink} to="/dashboard" sx={{ ml: 1 }}>

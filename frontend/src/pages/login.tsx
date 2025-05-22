@@ -18,7 +18,7 @@ export default function Login() {
       localStorage.setItem("accessToken", response.data.access);
       localStorage.setItem("refreshToken", response.data.refresh);
       toast.success(t('login.successful')); // This can also be translated if needed
-      navigate("/profile");
+      navigate("/dashboard");
     } catch (error: any) {
       console.error("Login failed:", error);
       let errorMessage = "An unexpected error occurred. Please try again."; // Default/fallback error

@@ -4,317 +4,333 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
-  LineData,
   CandlestickData,
+  LineData,
   HistogramData,
   UTCTimestamp,
-  TimeScaleOptions,
-  PriceScaleOptions,
+  LineStyle,
+  CrosshairMode,
+  SeriesMarker,
+  Time,
+  IPriceLine, // Import IPriceLine
+  PriceLineOptions,
+  SeriesType,
 } from 'lightweight-charts';
-import { Box, Theme } from '@mui/material';
+import { Kline, IndicatorData, MACDParams, BollingerBandsParams } from '../types/marketData';
 
 interface KlineChartProps {
-  data: CandlestickData[];
-  rsiData?: LineData[];
-  ema9Data?: LineData[];
-  ema21Data?: LineData[];
-  ema50Data?: LineData[];
-  ema200Data?: LineData[];
-  macdLineData?: LineData[];
-  macdSignalData?: LineData[];
-  macdHistData?: HistogramData[];
-  bollingerBandsData?: {
-    upper: LineData[];
-    middle: LineData[];
-    lower: LineData[];
-  };
-  adxData?: LineData[];
-  smaData?: LineData[];
-  theme: Theme;
-  height?: number;
-  width?: number;
-  showRSI?: boolean;
-  showEMA9?: boolean;
-  showEMA21?: boolean;
-  showEMA50?: boolean;
-  showEMA200?: boolean;
-  showMACD?: boolean;
-  showBollingerBands?: boolean;
-  showADX?: boolean; // Assuming ADX might become a separate pane later
-  showSMA?: boolean;
+  klines: Kline[];
+  indicators: IndicatorData;
+  symbol: string;
+  chartLayoutOptions?: Partial<Parameters<typeof createChart>[1]>;
 }
 
-const KlineChart: React.FC<KlineChartProps> = ({
-  data,
-  rsiData,
-  ema9Data,
-  ema21Data,
-  ema50Data,
-  ema200Data,
-  macdLineData,
-  macdSignalData,
-  macdHistData,
-  bollingerBandsData,
-  adxData,
-  smaData,
-  theme,
-  height = 600,
-  width,
-  showRSI = true,
-  showEMA9 = true,
-  showEMA21 = true,
-  showEMA50 = true,
-  showEMA200 = true,
-  showMACD = true,
-  showBollingerBands = true,
-  showADX = true, // If ADX becomes a separate pane, it needs to be in activeSeparatePanesConfig
-  showSMA = true,
-}) => {
+const formatCandlestickData = (kline: Kline): CandlestickData<UTCTimestamp> => ({
+  time: (kline.timestamp / 1000) as UTCTimestamp,
+  open: kline.open,
+  high: kline.high,
+  low: kline.low,
+  close: kline.close,
+});
+
+const formatLineData = (timestamp: number, value: number | null): LineData<UTCTimestamp> | null => {
+  if (value === null || isNaN(value)) return null;
+  return { time: (timestamp / 1000) as UTCTimestamp, value };
+};
+
+const formatHistogramData = (timestamp: number, value: number | null, color?: string): HistogramData<UTCTimestamp> | null => {
+  if (value === null || isNaN(value)) return null;
+  const dataPoint: HistogramData<UTCTimestamp> = { time: (timestamp / 1000) as UTCTimestamp, value };
+  if (color) {
+    dataPoint.color = color;
+  }
+  return dataPoint;
+};
+
+const KlineChart: React.FC<KlineChartProps> = ({ klines, indicators, chartLayoutOptions }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const ema9SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const ema21SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const ema50SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const ema200SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdHistSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const bbUpperSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const bbMiddleSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const bbLowerSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const adxSeriesRef = useRef<ISeriesApi<'Line'> | null>(null); // Separate ref for ADX series
-  const smaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const indicatorSeriesRefs = useRef<Record<string, ISeriesApi<SeriesType>>>({});
+  // Separate ref for price lines
+  const priceLineRefs = useRef<Record<string, IPriceLine>>({});
+
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-    }
-
-    const chart = createChart(chartContainerRef.current, {
-      width: width || chartContainerRef.current.clientWidth,
-      height: height,
-      layout: {
-        background: { color: theme.palette.background.paper },
-        textColor: theme.palette.text.primary,
-      },
-      grid: {
-        vertLines: { color: theme.palette.divider },
-        horzLines: { color: theme.palette.divider },
-      },
-      crosshair: { mode: 1 },
-      timeScale: {
-        borderColor: theme.palette.divider,
-        timeVisible: true,
-        secondsVisible: false,
-        fixLeftEdge: true,
-        fixRightEdge: true,
-      } as Partial<TimeScaleOptions>,
-      rightPriceScale: {
-        borderColor: theme.palette.divider,
-        autoScale: true,
-      } as Partial<PriceScaleOptions>,
-    });
-    chartRef.current = chart;
-
-    candlestickSeriesRef.current = chart.addCandlestickSeries({
-      upColor: theme.palette.success.main,
-      downColor: theme.palette.error.main,
-      borderDownColor: theme.palette.error.dark,
-      borderUpColor: theme.palette.success.dark,
-      wickDownColor: theme.palette.error.dark,
-      wickUpColor: theme.palette.success.dark,
-    });
-
-    // Pane layout configuration
-    const MAIN_PANE_MIN_HEIGHT_RATIO = 0.25; // Main chart should take at least 25%
-    const INDICATOR_PANE_TOTAL_ALLOCATION_RATIO = 0.65; // Max 65% for all indicator panes
-    const CHART_TOP_MARGIN_RATIO = 0.05;
-    const CHART_BOTTOM_MARGIN_RATIO = 0.05;
-    const GAP_BETWEEN_PANES_RATIO = 0.01;
-
-    let activeSeparatePanesConfig: {
-        key: string;
-        priceScaleId: string;
-        initFunctions: (()=>void)[]; // Functions to initialize series for this pane
-    }[] = [];
-
-    if (showRSI) {
-      activeSeparatePanesConfig.push({
-        key: 'rsi', priceScaleId: 'rsi-scale',
-        initFunctions: [() => {
-          rsiSeriesRef.current = chart.addLineSeries({ priceScaleId: 'rsi-scale', color: theme.palette.info.main, lineWidth: 1, title: 'RSI' });
-        }]
+    if (!chartRef.current) {
+      chartRef.current = createChart(chartContainerRef.current, {
+        width: chartContainerRef.current.clientWidth,
+        height: 500,
+        layout: {
+          background: { color: '#ffffff' },
+          textColor: '#333333',
+        },
+        grid: {
+          vertLines: { color: '#e1e1e1' },
+          horzLines: { color: '#e1e1e1' },
+        },
+        crosshair: {
+          mode: CrosshairMode.Normal,
+        },
+        timeScale: {
+          borderColor: '#cccccc',
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        ...chartLayoutOptions,
       });
-    }
-    if (showMACD) {
-      activeSeparatePanesConfig.push({
-        key: 'macd', priceScaleId: 'macd-scale',
-        initFunctions: [
-          () => { macdLineSeriesRef.current = chart.addLineSeries({ priceScaleId: 'macd-scale', color: theme.palette.primary.main, lineWidth: 1, title: 'MACD Line' });},
-          () => { macdSignalSeriesRef.current = chart.addLineSeries({ priceScaleId: 'macd-scale', color: theme.palette.warning.main, lineWidth: 1, title: 'Signal Line' });},
-          () => { macdHistSeriesRef.current = chart.addHistogramSeries({ priceScaleId: 'macd-scale', base: 0, title: 'MACD Hist'});}
-        ]
+
+      candlestickSeriesRef.current = chartRef.current.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderDownColor: '#ef5350',
+        borderUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+        wickUpColor: '#26a69a',
       });
-    }
-    // To make ADX a separate pane, add its config here:
-    // if (showADX) {
-    //   activeSeparatePanesConfig.push({
-    //     key: 'adx', priceScaleId: 'adx-scale',
-    //     initFunctions: [() => {
-    //        adxSeriesRef.current = chart.addLineSeries({ priceScaleId: 'adx-scale', color: theme.palette.error.light, lineWidth: 1, title: 'ADX' });
-    //     }]
-    //   });
-    // }
-
-
-    const numIndicatorPanes = activeSeparatePanesConfig.length;
-    let mainPaneActualBottomMargin; // This is the margin from the chart bottom for the main price scale
-
-    if (numIndicatorPanes === 0) {
-      mainPaneActualBottomMargin = CHART_BOTTOM_MARGIN_RATIO;
     } else {
-      // Calculate total height needed for indicators including gaps and final bottom margin
-      const totalGapsHeight = numIndicatorPanes * GAP_BETWEEN_PANES_RATIO;
-      mainPaneActualBottomMargin = INDICATOR_PANE_TOTAL_ALLOCATION_RATIO + totalGapsHeight + CHART_BOTTOM_MARGIN_RATIO;
+      chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
     }
 
-    // Ensure main pane has minimum height
-    if ((1.0 - CHART_TOP_MARGIN_RATIO - mainPaneActualBottomMargin) < MAIN_PANE_MIN_HEIGHT_RATIO) {
-        mainPaneActualBottomMargin = 1.0 - CHART_TOP_MARGIN_RATIO - MAIN_PANE_MIN_HEIGHT_RATIO;
+    if (candlestickSeriesRef.current && klines.length > 0) {
+      const formattedKlines = klines.map(formatCandlestickData);
+      candlestickSeriesRef.current.setData(formattedKlines);
+
+      const markers: SeriesMarker<Time>[] = [];
+      klines.forEach(kline => {
+        if (kline.signal === 'BUY') {
+          markers.push({
+            time: (kline.timestamp / 1000) as UTCTimestamp,
+            position: 'belowBar',
+            color: 'green',
+            shape: 'arrowUp',
+            text: 'Buy',
+            size: 1,
+          });
+        } else if (kline.signal === 'SELL') {
+          markers.push({
+            time: (kline.timestamp / 1000) as UTCTimestamp,
+            position: 'aboveBar',
+            color: 'red',
+            shape: 'arrowDown',
+            text: 'Sell',
+            size: 1,
+          });
+        }
+      });
+      candlestickSeriesRef.current.setMarkers(markers);
     }
-    // Clamp mainPaneActualBottomMargin to avoid negative main pane height or exceeding 1 with top margin
-    mainPaneActualBottomMargin = Math.max(CHART_BOTTOM_MARGIN_RATIO, Math.min(mainPaneActualBottomMargin, 1.0 - CHART_TOP_MARGIN_RATIO - 0.01));
 
+    const currentChart = chartRef.current;
+    if (currentChart && indicators.timestamps && indicators.timestamps.length > 0) {
+      const timestamps = indicators.timestamps;
 
-    chart.priceScale('right').applyOptions({
-      scaleMargins: {
-        top: CHART_TOP_MARGIN_RATIO,
-        bottom: mainPaneActualBottomMargin,
-      }
-    });
+      const manageLineSeries = (seriesKey: string, data: (number | null)[], color: string, pane?: number, lineStyle: LineStyle = LineStyle.Solid, lineWidth: 1 | 2 | 3 | 4 = 1) => {
+        const seriesData = timestamps
+          .map((ts, i) => formatLineData(ts, data[i]))
+          .filter((d): d is LineData<UTCTimestamp> => d !== null);
 
-    let currentPaneDrawingStartAbsolute = 1.0 - mainPaneActualBottomMargin; // Top edge where the first indicator pane starts (from chart top 0.0)
-
-    if (numIndicatorPanes > 0) {
-      const totalNetHeightForIndicators = INDICATOR_PANE_TOTAL_ALLOCATION_RATIO; // Use the full allocation
-      const heightPerIndicatorPaneNet = totalNetHeightForIndicators / numIndicatorPanes;
-
-      for (const paneConfig of activeSeparatePanesConfig) {
-        const paneTopAbsolute = currentPaneDrawingStartAbsolute;
-        let paneBottomAbsoluteEdge = paneTopAbsolute + heightPerIndicatorPaneNet;
-
-        // Ensure paneBottomAbsoluteEdge does not exceed 1.0 - CHART_BOTTOM_MARGIN_RATIO
-        paneBottomAbsoluteEdge = Math.min(paneBottomAbsoluteEdge, 1.0 - CHART_BOTTOM_MARGIN_RATIO);
-        // Ensure paneTopAbsolute is valid
-        if (paneTopAbsolute < CHART_TOP_MARGIN_RATIO || paneTopAbsolute >= paneBottomAbsoluteEdge) {
-            console.error("Invalid pane positioning for", paneConfig.key, {paneTopAbsolute, paneBottomAbsoluteEdge});
-            continue; // Skip this pane if positioning is invalid
+        if (seriesData.length === 0) {
+          if (indicatorSeriesRefs.current[seriesKey]) {
+            currentChart.removeSeries(indicatorSeriesRefs.current[seriesKey]);
+            delete indicatorSeriesRefs.current[seriesKey];
+          }
+          // Also remove any associated price lines if the main series is removed
+          Object.keys(priceLineRefs.current).forEach(plKey => {
+            if (plKey.startsWith(seriesKey + "_pl_")) { // Naming convention for associated price lines
+                 // Price lines are removed from the series they belong to, not the chart directly.
+                 // This part requires knowing which series the price line was attached to.
+                 // For simplicity, we assume price lines are only on their specific series.
+                 // If `indicatorSeriesRefs.current[seriesKey]` was the parent, its removal handles them,
+                 // but direct management is better if they could be on other series.
+                 // Here, we assume the series removal will also clear its price lines,
+                 // but we must clear our refs.
+                delete priceLineRefs.current[plKey];
+            }
+          });
+          return;
         }
 
-
-        paneConfig.initFunctions.forEach(initFn => initFn());
-
-        const scaleMarginBottom = 1.0 - paneBottomAbsoluteEdge;
-
-        if (paneTopAbsolute < 0 || paneTopAbsolute > 1 || scaleMarginBottom < 0 || scaleMarginBottom > 1 || (paneTopAbsolute + scaleMarginBottom) >= 1.0) {
-             console.error("Error setting scaleMargins for pane:", paneConfig.key,
-                           "Calculated top:", paneTopAbsolute,
-                           "Calculated bottom_margin:", scaleMarginBottom,
-                           "Sum:", paneTopAbsolute + scaleMarginBottom);
+        if (indicatorSeriesRefs.current[seriesKey]) {
+          indicatorSeriesRefs.current[seriesKey].setData(seriesData);
         } else {
-            chart.priceScale(paneConfig.priceScaleId).applyOptions({
-                scaleMargins: {
-                    top: paneTopAbsolute,
-                    bottom: scaleMarginBottom,
-                }
-            });
+          indicatorSeriesRefs.current[seriesKey] = currentChart.addLineSeries({
+            color,
+            lineWidth,
+            lineStyle,
+            lastValueVisible: true,
+            priceLineVisible: false,
+          });
+          indicatorSeriesRefs.current[seriesKey].setData(seriesData);
         }
-        currentPaneDrawingStartAbsolute = paneBottomAbsoluteEdge + GAP_BETWEEN_PANES_RATIO;
-      }
+      };
+
+      const manageHistogramSeries = (seriesKey: string, data: (number | null)[], basePane: number, positiveColor: string, negativeColor: string) => {
+        const seriesData = timestamps
+          .map((ts, i) => formatHistogramData(ts, data[i], data[i] !== null && data[i]! >= 0 ? positiveColor : negativeColor))
+          .filter((d): d is HistogramData<UTCTimestamp> => d !== null);
+
+        if (seriesData.length === 0) {
+          if (indicatorSeriesRefs.current[seriesKey]) {
+            currentChart.removeSeries(indicatorSeriesRefs.current[seriesKey]);
+            delete indicatorSeriesRefs.current[seriesKey];
+          }
+          return;
+        }
+        if (indicatorSeriesRefs.current[seriesKey]) {
+          indicatorSeriesRefs.current[seriesKey].setData(seriesData);
+        } else {
+          indicatorSeriesRefs.current[seriesKey] = currentChart.addHistogramSeries({
+            lastValueVisible: true,
+            priceLineVisible: false,
+          });
+          indicatorSeriesRefs.current[seriesKey].setData(seriesData);
+        }
+      };
+
+      indicators.sma && Object.entries(indicators.sma).forEach(([key, data]) => {
+        manageLineSeries(`sma_${key}`, data, '#FFD700', 0, LineStyle.Dotted, 1);
+      });
+      indicators.ema && Object.entries(indicators.ema).forEach(([key, data]) => {
+        const color = key.includes('200') ? '#FF6347' : key.includes('50') ? '#4682B4' : '#FFA500';
+        manageLineSeries(`ema_${key}`, data, color, 0, LineStyle.Solid, 1);
+      });
+
+      indicators.bollinger_bands?.forEach((bb: BollingerBandsParams, index: number) => {
+        manageLineSeries(`bb_upper_${index}`, bb.upper_band, '#ADD8E6', 0, LineStyle.Dashed, 1);
+        manageLineSeries(`bb_middle_${index}`, bb.middle_band, '#DDA0DD', 0, LineStyle.Dashed, 1);
+        manageLineSeries(`bb_lower_${index}`, bb.lower_band, '#ADD8E6', 0, LineStyle.Dashed, 1);
+      });
+
+      indicators.rsi && Object.entries(indicators.rsi).forEach(([key, data]) => {
+        const rsiSeriesKey = `rsi_${key}`;
+        if (key === 'rsi_14') {
+          manageLineSeries(rsiSeriesKey, data, '#9C27B0', 1, LineStyle.Solid, 2);
+          const rsiPaneSeries = indicatorSeriesRefs.current[rsiSeriesKey] as ISeriesApi<'Line'> | undefined; // Cast to specific type
+
+          if (rsiPaneSeries) {
+            const pl70Key = `${rsiSeriesKey}_pl_70`; // Unique key for the price line
+            const pl30Key = `${rsiSeriesKey}_pl_30`;
+
+            if (!priceLineRefs.current[pl70Key]) {
+              priceLineRefs.current[pl70Key] = rsiPaneSeries.createPriceLine({ price: 70, color: 'red', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Overbought (70)' });
+            } else {
+                // Optionally update if needed, e.g. priceLineRefs.current[pl70Key].applyOptions({ price: 70, ... })
+            }
+            if (!priceLineRefs.current[pl30Key]) {
+              priceLineRefs.current[pl30Key] = rsiPaneSeries.createPriceLine({ price: 30, color: 'green', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Oversold (30)' });
+            }
+          }
+        }
+      });
+
+      indicators.macd?.forEach((macdSet: MACDParams, index: number) => {
+        if (index === 0) {
+          manageLineSeries(`macd_line_${index}`, macdSet.macd_line, '#2196F3', 2, LineStyle.Solid, 2);
+          manageLineSeries(`macd_signal_${index}`, macdSet.signal_line, '#FF9800', 2, LineStyle.Solid, 1);
+          manageHistogramSeries(`macd_hist_${index}`, macdSet.histogram, 2, 'rgba(38,166,154,0.5)', 'rgba(239,83,80,0.5)');
+        }
+      });
+
+      indicators.adx && Object.entries(indicators.adx).forEach(([key, data]) => {
+        if (key.startsWith('adx_')) {
+          manageLineSeries(`adx_line_${key}`, data, '#757575', 3, LineStyle.Solid, 2);
+        } else if (key.startsWith('pdi_')) {
+          manageLineSeries(`pdi_line_${key}`, data, '#4CAF50', 3, LineStyle.Solid, 1);
+        } else if (key.startsWith('mdi_')) {
+          manageLineSeries(`mdi_line_${key}`, data, '#F44336', 3, LineStyle.Solid, 1);
+        }
+      });
+
+      const activeSeriesKeys = new Set<string>();
+      if (indicators.sma) Object.keys(indicators.sma).forEach(k => activeSeriesKeys.add(`sma_${k}`));
+      if (indicators.ema) Object.keys(indicators.ema).forEach(k => activeSeriesKeys.add(`ema_${k}`));
+      if (indicators.bollinger_bands) indicators.bollinger_bands.forEach((_, i) => {
+        activeSeriesKeys.add(`bb_upper_${i}`);
+        activeSeriesKeys.add(`bb_middle_${i}`);
+        activeSeriesKeys.add(`bb_lower_${i}`);
+      });
+      if (indicators.rsi) Object.keys(indicators.rsi).forEach(k => activeSeriesKeys.add(`rsi_${k}`));
+      if (indicators.macd) indicators.macd.forEach((_, i) => {
+        if (i === 0) {
+          activeSeriesKeys.add(`macd_line_${i}`);
+          activeSeriesKeys.add(`macd_signal_${i}`);
+          activeSeriesKeys.add(`macd_hist_${i}`);
+        }
+      });
+      if (indicators.adx) Object.keys(indicators.adx).forEach(k => {
+        if (k.startsWith('adx_')) activeSeriesKeys.add(`adx_line_${k}`);
+        else if (k.startsWith('pdi_')) activeSeriesKeys.add(`pdi_line_${k}`);
+        else if (k.startsWith('mdi_')) activeSeriesKeys.add(`mdi_line_${k}`);
+      });
+
+      Object.keys(indicatorSeriesRefs.current).forEach(existingKey => {
+        if (!activeSeriesKeys.has(existingKey)) {
+          // Before removing the series, remove its associated price lines
+          Object.keys(priceLineRefs.current).forEach(plKey => {
+            if (plKey.startsWith(existingKey + "_pl_")) {
+              const series = indicatorSeriesRefs.current[existingKey];
+              if(series) { // Ensure series still exists before trying to remove its price line
+                series.removePriceLine(priceLineRefs.current[plKey]);
+              }
+              delete priceLineRefs.current[plKey];
+            }
+          });
+          currentChart.removeSeries(indicatorSeriesRefs.current[existingKey]);
+          delete indicatorSeriesRefs.current[existingKey];
+        }
+      });
     }
-
-    // Initialize overlay series on the main pane ('right' priceScaleId)
-    if(showEMA9) ema9SeriesRef.current = chart.addLineSeries({ color: '#FFD700', lineWidth: 1, title: 'EMA 9', priceScaleId: 'right' });
-    if(showEMA21) ema21SeriesRef.current = chart.addLineSeries({ color: '#ADFF2F', lineWidth: 1, title: 'EMA 21', priceScaleId: 'right' });
-    if(showEMA50) ema50SeriesRef.current = chart.addLineSeries({ color: '#00BFFF', lineWidth: 1, title: 'EMA 50', priceScaleId: 'right' });
-    if(showEMA200) ema200SeriesRef.current = chart.addLineSeries({ color: '#FF69B4', lineWidth: 2, title: 'EMA 200', priceScaleId: 'right' });
-    if(showBollingerBands) {
-        bbUpperSeriesRef.current = chart.addLineSeries({ color: '#4682B4', lineWidth: 1, title: 'BB Upper', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'right' });
-        bbMiddleSeriesRef.current = chart.addLineSeries({ color: '#A9A9A9', lineWidth: 1, title: 'BB Middle', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'right' });
-        bbLowerSeriesRef.current = chart.addLineSeries({ color: '#4682B4', lineWidth: 1, title: 'BB Lower', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'right' });
-    }
-    if(showSMA) smaSeriesRef.current = chart.addLineSeries({ color: '#DAA520', lineWidth: 1, title: 'SMA', priceScaleId: 'right' });
-
-    // ADX is an overlay on main chart if not configured as a separate pane above
-    if(showADX && !activeSeparatePanesConfig.find(p => p.key === 'adx')) {
-        adxSeriesRef.current = chart.addLineSeries({ priceScaleId: 'right', color: theme.palette.error.light, lineWidth: 1, title: 'ADX'});
-    }
-
-    chart.timeScale().fitContent();
-
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-      }
-    };
-  // Re-initialize chart if theme, dimensions, or pane structure changes.
-  // Add showADX here IF it becomes a separately managed pane in activeSeparatePanesConfig.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme, height, width, showRSI, showMACD /*, showADX if separate pane */]);
-
-  // Data setting and visibility management for all series
-  useEffect(() => { if (candlestickSeriesRef.current && data) candlestickSeriesRef.current.setData(data);}, [data]);
-  useEffect(() => { if (rsiSeriesRef.current) { rsiSeriesRef.current.setData(rsiData || []); rsiSeriesRef.current.applyOptions({visible: showRSI}); }}, [rsiData, showRSI]);
-  useEffect(() => { if (ema9SeriesRef.current) { ema9SeriesRef.current.setData(ema9Data || []); ema9SeriesRef.current.applyOptions({visible: showEMA9}); }}, [ema9Data, showEMA9]);
-  useEffect(() => { if (ema21SeriesRef.current) { ema21SeriesRef.current.setData(ema21Data || []); ema21SeriesRef.current.applyOptions({visible: showEMA21}); }}, [ema21Data, showEMA21]);
-  useEffect(() => { if (ema50SeriesRef.current) { ema50SeriesRef.current.setData(ema50Data || []); ema50SeriesRef.current.applyOptions({visible: showEMA50}); }}, [ema50Data, showEMA50]);
-  useEffect(() => { if (ema200SeriesRef.current) { ema200SeriesRef.current.setData(ema200Data || []); ema200SeriesRef.current.applyOptions({visible: showEMA200}); }}, [ema200Data, showEMA200]);
-
-  useEffect(() => {
-    const visible = showMACD;
-    if (macdLineSeriesRef.current) { macdLineSeriesRef.current.setData(macdLineData || []); macdLineSeriesRef.current.applyOptions({visible});}
-    if (macdSignalSeriesRef.current) { macdSignalSeriesRef.current.setData(macdSignalData || []); macdSignalSeriesRef.current.applyOptions({visible});}
-    if (macdHistSeriesRef.current) {
-        const themedMacdHistData = macdHistData?.map(d => ({...d, color: d.value >= 0 ? theme.palette.success.light : theme.palette.error.light })) || [];
-        macdHistSeriesRef.current.setData(themedMacdHistData);
-        macdHistSeriesRef.current.applyOptions({visible});
-    }
-  }, [macdLineData, macdSignalData, macdHistData, showMACD, theme]);
-
-  useEffect(() => {
-    const visible = showBollingerBands;
-    if (bbUpperSeriesRef.current) { bbUpperSeriesRef.current.setData(bollingerBandsData?.upper || []); bbUpperSeriesRef.current.applyOptions({visible});}
-    if (bbMiddleSeriesRef.current) { bbMiddleSeriesRef.current.setData(bollingerBandsData?.middle || []); bbMiddleSeriesRef.current.applyOptions({visible});}
-    if (bbLowerSeriesRef.current) { bbLowerSeriesRef.current.setData(bollingerBandsData?.lower || []); bbLowerSeriesRef.current.applyOptions({visible});}
-  }, [bollingerBandsData, showBollingerBands]);
-
-  useEffect(() => { if (adxSeriesRef.current) { adxSeriesRef.current.setData(adxData || []); adxSeriesRef.current.applyOptions({visible: showADX}); }}, [adxData, showADX]);
-  useEffect(() => { if (smaSeriesRef.current) { smaSeriesRef.current.setData(smaData || []); smaSeriesRef.current.applyOptions({visible: showSMA}); }}, [smaData, showSMA]);
+  }, [klines, indicators, chartLayoutOptions]);
 
   useEffect(() => {
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current) {
         chartRef.current.applyOptions({
-          width: width || chartContainerRef.current.clientWidth,
-          height: height,
+          width: chartContainerRef.current.clientWidth,
         });
       }
     };
     window.addEventListener('resize', handleResize);
-    if (!width && chartContainerRef.current) {
-        handleResize();
-    }
     return () => window.removeEventListener('resize', handleResize);
-  }, [width, height]);
+  }, []);
 
-  return <Box ref={chartContainerRef} sx={{ position: 'relative', width: '100%', height: `${height}px` }} />;
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        // Remove all series and their price lines before removing the chart
+        Object.values(indicatorSeriesRefs.current).forEach(series => {
+            // Iterating over priceLineRefs and removing them explicitly
+            Object.entries(priceLineRefs.current).forEach(([plKey, priceLine]) => {
+                // This check might be overly broad if price lines could be on candlestick series
+                // Ideally, associate price lines with their parent series more directly if possible
+                // For now, this attempts to remove all known price lines from any indicator series that might own them.
+                // A safer way is if the series object itself could list its price lines.
+                // Given the current structure, we iterate all and try to remove.
+                try {
+                    series.removePriceLine(priceLine); // This might error if priceLine isn't on THIS series
+                } catch (e) { /* ignore if not on this series */ }
+                delete priceLineRefs.current[plKey];
+            });
+            chartRef.current?.removeSeries(series);
+        });
+        if (candlestickSeriesRef.current) {
+            chartRef.current?.removeSeries(candlestickSeriesRef.current);
+        }
+
+        chartRef.current.remove();
+        chartRef.current = null;
+        candlestickSeriesRef.current = null;
+        indicatorSeriesRefs.current = {};
+        priceLineRefs.current = {};
+      }
+    };
+  }, []);
+
+  return <div ref={chartContainerRef} style={{ width: '100%', height: '500px' }} />;
 };
 
 export default memo(KlineChart);

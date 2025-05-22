@@ -1,6 +1,7 @@
+// frontend/src/components/LanguageSwitcher.tsx
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, ButtonGroup } from '@mui/material';
+import { Button, Box } from '@mui/material';
 
 const LanguageSwitcher: React.FC = () => {
   const { i18n } = useTranslation();
@@ -10,11 +11,25 @@ const LanguageSwitcher: React.FC = () => {
   };
 
   return (
-    <ButtonGroup variant="outlined" aria-label="language switcher" sx={{ position: 'fixed', top: 16, right: 16, zIndex: 1300, backgroundColor: 'background.paper' }}>
-      <Button onClick={() => changeLanguage('en')} disabled={i18n.language === 'en'}>EN</Button>
-      <Button onClick={() => changeLanguage('uk')} disabled={i18n.language === 'uk'}>UA</Button>
-</ButtonGroup>
-);
+    <Box>
+      <Button
+        color="inherit"
+        onClick={() => changeLanguage('en')}
+        disabled={i18n.language === 'en'}
+        sx={{ fontWeight: i18n.language === 'en' ? 'bold' : 'normal' }}
+      >
+        EN
+      </Button>
+      <Button
+        color="inherit"
+        onClick={() => changeLanguage('uk')}
+        disabled={i18n.language === 'uk'}
+        sx={{ fontWeight: i18n.language === 'uk' ? 'bold' : 'normal' }}
+      >
+        UA
+      </Button>
+    </Box>
+  );
 };
 
 export default LanguageSwitcher;

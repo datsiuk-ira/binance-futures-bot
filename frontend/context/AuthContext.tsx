@@ -11,10 +11,9 @@ interface AuthContextType {
   setTokens: (tokens: Tokens | null) => void;
   logout: () => void;
   isAuthenticated: boolean;
-  loadingAuth: boolean; // Перейменовано для ясності, раніше могло бути 'loading'
+  loadingAuth: boolean;
 }
 
-// Надаємо типове значення, яке відповідає AuthContextType, особливо для loadingAuth
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -35,7 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       console.log("AuthProvider: No tokens found in localStorage.");
     }
-    setLoadingAuth(false); // Перевірка автентифікації завершена
+    setLoadingAuth(false);
     console.log("AuthProvider: loadingAuth set to false.");
   }, []);
 
@@ -54,7 +53,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAuthenticated = useMemo(() => !!tokens, [tokens]);
 
-  // AuthContext.Provider тепер завжди рендериться
   return (
     <AuthContext.Provider value={{ tokens, setTokens, logout, isAuthenticated, loadingAuth }}>
       {children}
@@ -65,8 +63,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    // Ця помилка все ще можлива, якщо useAuth викликається зовсім поза AuthProvider,
-    // але проблема з null під час завантаження має бути вирішена.
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
