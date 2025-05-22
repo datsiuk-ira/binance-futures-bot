@@ -1,34 +1,28 @@
-// frontend/src/components/LanguageSwitcher.tsx
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Box } from '@mui/material';
+import { Select, MenuItem, FormControl, InputLabel, SelectChangeEvent } from '@mui/material';
 
 const LanguageSwitcher: React.FC = () => {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
-  const changeLanguage = (lng: string) => {
-    i18n.changeLanguage(lng);
+  const handleChangeLanguage = (event: SelectChangeEvent<string>) => {
+    i18n.changeLanguage(event.target.value as string);
   };
 
   return (
-    <Box>
-      <Button
-        color="inherit"
-        onClick={() => changeLanguage('en')}
-        disabled={i18n.language === 'en'}
-        sx={{ fontWeight: i18n.language === 'en' ? 'bold' : 'normal' }}
+    <FormControl size="small" sx={{ minWidth: 120 }}>
+      <InputLabel id="language-select-label">{t('languageSwitcher.label')}</InputLabel>
+      <Select
+        labelId="language-select-label"
+        id="language-select"
+        value={i18n.language}
+        label={t('languageSwitcher.label')}
+        onChange={handleChangeLanguage}
       >
-        EN
-      </Button>
-      <Button
-        color="inherit"
-        onClick={() => changeLanguage('uk')}
-        disabled={i18n.language === 'uk'}
-        sx={{ fontWeight: i18n.language === 'uk' ? 'bold' : 'normal' }}
-      >
-        UA
-      </Button>
-    </Box>
+        <MenuItem value="en">{t('languageSwitcher.en')}</MenuItem>
+        <MenuItem value="uk">{t('languageSwitcher.uk')}</MenuItem>
+      </Select>
+    </FormControl>
   );
 };
 

@@ -1,107 +1,61 @@
 // frontend/src/App.tsx
-import React from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate, Link as RouterLink } from 'react-router-dom';
-import { ThemeProvider } from '@mui/material/styles';
-import { AuthProvider, useAuth } from '../context/AuthContext'; // Шлях до AuthContext
+import React, { Suspense } from 'react';
+// Remove: import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom'; // Keep these
+// ThemeProvider and AuthProvider are now higher up in main.tsx,
+// but App can still be wrapped by them if needed for structure, or they can be solely in main.tsx.
+// For simplicity, let's assume App doesn't need to re-declare ThemeProvider if main.tsx does.
+// AuthProvider is also in main.tsx wrapping this.
+// import { ThemeProvider } from '@mui/material/styles'; // Already in main.tsx
+// import CssBaseline from '@mui/material/CssBaseline'; // Already in main.tsx
+// import { AuthProvider } from '../context/AuthContext'; // Already in main.tsx
+// import theme from './theme'; // Already in main.tsx
+
 import LoginPage from './pages/login';
 import SignUpPage from './pages/sign_up';
-import ProfilePage from './pages/profile'; // Використовуйте ProfilePage
 import DashboardPage from './pages/DashboardPage';
-import PrivateRoute from './components/PrivateRoute'; // Шлях до PrivateRoute
-import theme from './theme';
-import LanguageSwitcher from "./components/LanguageSwitcher"; // Шлях до LanguageSwitcher
-import { useTranslation } from 'react-i18next';
-import { AppBar, Toolbar, Typography, Button, Box, Container, CircularProgress } from '@mui/material'; // Додано CircularProgress
+import ProfilePage from './pages/profile';
+import PrivateRoute from './components/PrivateRoute';
+import LanguageSwitcher from './components/LanguageSwitcher';
+import { Box, CircularProgress } from '@mui/material';
 
-// Profile імпортувався двічі, видаляємо один, використовуємо ProfilePage
-// import Profile from "./pages/profile"; // Видалено або замінено на ProfilePage
-
-const AppContent: React.FC = () => {
-    const { isAuthenticated, logout, loadingAuth } = useAuth();
-    const { t } = useTranslation("common");
-
-    if (loadingAuth) {
-      return (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-            <CircularProgress />
-        </Box>
-      );
-    }
-
-    return (
-        <>
-            <AppBar position="static">
-                <Toolbar>
-                    {/* App Name / Home Link */}
-                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                        <RouterLink to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-                            {t('appName')}
-                        </RouterLink>
-                    </Typography>
-
-                    {/* Group for right-aligned items */}
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Box sx={{ ml: 'auto' }}>
-                            <LanguageSwitcher />
-                        </Box>
-                        {isAuthenticated ? (
-                            <>
-                                <Button color="inherit" component={RouterLink} to="/dashboard" sx={{ ml: 1 }}>
-                                    {t('Dashboard')}
-                                </Button>
-                                <Button color="inherit" component={RouterLink} to="/profile" sx={{ ml: 1 }}>
-                                    {t('Profile')}
-                                </Button>
-                                <Button color="inherit" onClick={logout} sx={{ ml: 1 }}>
-                                    {t('logout')}
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button color="inherit" component={RouterLink} to="/login" sx={{ ml: 1 }}>
-                                    {t('login')}
-                                </Button>
-                                <Button color="inherit" component={RouterLink} to="/signup" sx={{ ml: 1 }}>
-                                    {t('signUp')}
-                                </Button>
-                            </>
-                        )}
-                    </Box>
-                </Toolbar>
-            </AppBar>
-            <Container sx={{ marginTop: 4, paddingBottom: 4 }}>
-                <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/signup" element={<SignUpPage />} />
-
-                    {/* Захищені маршрути */}
-                    <Route element={<PrivateRoute/>}>
-                        <Route path="/profile" element={<ProfilePage/>}/> {/* Використовуємо ProfilePage для консистентності */}
-                        <Route path="/dashboard" element={<DashboardPage/>}/>
-                    </Route>
-
-                    {/* Логіка перенаправлення для кореневого шляху */}
-                    <Route
-                        path="/"
-                        element={
-                            // loadingAuth вже оброблено вище, тут ми точно знаємо стан isAuthenticated
-                            isAuthenticated ? <Navigate to="/dashboard" /> : <Navigate to="/login" />
-                        }
-                    />
-                </Routes>
-            </Container>
-        </>
-    );
-};
-
-const App: React.FC = () => {
+function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ThemeProvider>
+    // ThemeProvider, CssBaseline, Router (BrowserRouter), and AuthProvider are now in main.tsx
+    // So, App.tsx focuses on the Routes and layout within that context.
+    <>
+      <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 1300 }}>
+        <LanguageSwitcher />
+      </Box>
+      <Suspense fallback={
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+          <CircularProgress />
+        </Box>
+      }>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+
+          {/* Protected Routes */}
+          <Route element={<PrivateRoute />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            {/* Add other private routes here */}
+          </Route>
+
+          {/* Redirect root to dashboard if authenticated, otherwise to login */}
+          <Route
+            path="/"
+            element={
+              <Navigate replace to="/dashboard" />
+            }
+          />
+          {/* Fallback for any other route */}
+          <Route path="*" element={<Navigate replace to="/" />} />
+        </Routes>
+      </Suspense>
+    </>
   );
-};
+}
 
 export default App;

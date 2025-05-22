@@ -1,236 +1,161 @@
-// frontend/src/hooks/useMarketDataWebSocket.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MarketDataMessage, Kline, IndicatorData } from '../types/marketData';
-import { getHistoricalIndicators } from '../api/marketDataService';
+import { Kline, IndicatorData, MarketDataMessage } from '../types/marketData'; // Updated import
+import { useAuth } from '../../context/AuthContext'; // For isAuthenticated
 
-const WS_BASE_URL = 'ws://localhost:8000/ws';
-const POLLING_INTERVAL = 30000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 3000;
 
-interface MarketDataState {
+interface WebSocketHookData {
   klines: Kline[];
-  indicators: IndicatorData;
-  isConnected: boolean;
-  isConnecting: boolean;
-  error: string | null;
-  lastMessageTimestamp: number | null;
-  isPolling: boolean;
+  indicators: IndicatorData | null;
+  lastMessageTimestamp: number | null; // To help trigger re-renders in chart
 }
 
-const MAX_KLINES_IN_STATE = 500;
-
-export const useMarketDataWebSocket = (symbol: string | null, interval: string | null) => {
-  const [marketData, setMarketData] = useState<MarketDataState>({
+const useMarketDataWebSocket = (pairSymbol: string | null) => {
+  const { isAuthenticated } = useAuth(); // Get authentication status
+  const [marketData, setMarketData] = useState<WebSocketHookData>({
     klines: [],
-    indicators: { timestamps: [] },
-    isConnected: false,
-    isConnecting: false,
-    error: null,
+    indicators: null,
     lastMessageTimestamp: null,
-    isPolling: false,
   });
-
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const webSocketRef = useRef<WebSocket | null>(null);
-  // Changed NodeJS.Timeout to number
-  const pollingIntervalRef = useRef<number | null>(null); // <--- FIX HERE
-  const shouldAttemptReconnectRef = useRef<boolean>(true);
+  const reconnectAttemptsRef = useRef<number>(0);
 
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-    setMarketData(prev => ({ ...prev, isPolling: false }));
-  };
-
-  const pollData = useCallback(async () => {
-    if (!symbol || !interval || !marketData.isPolling) return; // Check isPolling from state
-    try {
-      const data = await getHistoricalIndicators(symbol, interval, MAX_KLINES_IN_STATE);
-      setMarketData(prev => ({
-        ...prev,
-        klines: data.klines.slice(-MAX_KLINES_IN_STATE),
-        indicators: data.indicators,
-        error: null,
-        lastMessageTimestamp: Date.now(),
-      }));
-    } catch (e: any) {
-      console.error('Polling error:', e);
-      setMarketData(prev => ({ ...prev, error: e.message || 'Polling failed' }));
-    }
-  }, [symbol, interval, marketData.isPolling]); // marketData.isPolling dependency
-
-  const startPolling = useCallback(() => { // Make startPolling a useCallback
-    if (!symbol || !interval || pollingIntervalRef.current) return;
-    setMarketData(prev => ({ ...prev, isPolling: true, isConnected: false, isConnecting: false }));
-    pollData();
-    pollingIntervalRef.current = window.setInterval(pollData, POLLING_INTERVAL); // Use window.setInterval for clarity
-  }, [symbol, interval, pollData]);
-
-
-  const connectWebSocket = useCallback((isManualAttempt = false) => {
-    if (!symbol || !interval) {
-      if (webSocketRef.current) {
-        shouldAttemptReconnectRef.current = false;
+  const connectWebSocket = useCallback(() => {
+    if (!pairSymbol || !isAuthenticated) {
+      console.log("WebSocket: Prerequisites not met (pairSymbol or !isAuthenticated). Current auth state:", isAuthenticated);
+      if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
         webSocketRef.current.close();
-        webSocketRef.current = null;
       }
-      stopPolling();
-      setMarketData(prev => ({
-        ...prev,
-        klines: [],
-        indicators: { timestamps: [] },
-        isConnected: false,
-        isConnecting: false,
-        error: prev.error || 'Symbol or interval not selected.',
-        isPolling: false,
-      }));
+      setMarketData({ klines: [], indicators: null, lastMessageTimestamp: null }); // Clear data
+      setIsConnected(false);
       return;
     }
 
     if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
-        if(isManualAttempt) console.log("WebSocket already open.");
+      // If already connected to the same pair, do nothing.
+      if (webSocketRef.current.url.includes(`/${pairSymbol.toLowerCase()}/`)) {
+        console.log("WebSocket already connected for", pairSymbol);
         return;
-    }
-    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.CONNECTING) {
-        if(isManualAttempt) console.log("WebSocket already connecting.");
-        return;
-    }
-
-    stopPolling();
-    shouldAttemptReconnectRef.current = true;
-
-    if (webSocketRef.current) {
-      webSocketRef.current.onclose = null;
-      webSocketRef.current.onerror = null;
-      webSocketRef.current.onmessage = null;
-      webSocketRef.current.onopen = null;
+      }
+      // If connected to a different pair, close the old connection first
+      console.log("WebSocket closing old connection to connect to new pair:", pairSymbol);
       webSocketRef.current.close();
-      webSocketRef.current = null;
     }
 
-    setMarketData(prev => ({ ...prev, isConnecting: true, isConnected: false, error: null, isPolling: false }));
-    const wsUrl = `${WS_BASE_URL}/marketdata/?symbol=${symbol.toUpperCase()}&interval=${interval}`;
-    const ws = new WebSocket(wsUrl);
-    webSocketRef.current = ws;
+    const VITE_WS_BASE_URL = 'ws://localhost:8000/ws';
+    // Ensure token is appended if your WebSocket backend requires it for auth
+    // For example, if using the TokenAuthMiddleware discussed previously:
+    // const token = localStorage.getItem('accessToken'); // Or wherever your token is
+    // const wsUrl = `${VITE_WS_BASE_URL}/market-data/${pairSymbol.toLowerCase()}/?token=${token}`;
+    const wsUrl = `${VITE_WS_BASE_URL}/market-data/${pairSymbol.toLowerCase()}/`; // Original, if no token in query
 
-    ws.onopen = () => {
-      console.log(`WebSocket connected for ${symbol} ${interval}`);
-      shouldAttemptReconnectRef.current = true;
-      stopPolling();
-      setMarketData(prev => ({
-        ...prev,
-        isConnected: true,
-        isConnecting: false,
-        error: null,
-        isPolling: false,
-      }));
+    console.log(`WebSocket: Attempting to connect to: ${wsUrl}`);
+    webSocketRef.current = new WebSocket(wsUrl);
+
+    webSocketRef.current.onopen = () => {
+      console.log(`WebSocket connected for ${pairSymbol}`);
+      setIsConnected(true);
+      setError(null);
+      reconnectAttemptsRef.current = 0;
+      // Clear any stale data from previous connections
+      setMarketData({ klines: [], indicators: null, lastMessageTimestamp: Date.now() });
     };
 
-    ws.onmessage = (event) => {
+    webSocketRef.current.onmessage = (event) => {
       try {
-        const message: MarketDataMessage = JSON.parse(event.data as string);
+        const message = JSON.parse(event.data as string) as MarketDataMessage;
+        console.log('WebSocket message received:', message.type, message.symbol);
+
         if (message.type === 'kline_with_indicators') {
-          let updatedKlines = message.klines;
-          if (updatedKlines.length > MAX_KLINES_IN_STATE) {
-            updatedKlines = updatedKlines.slice(-MAX_KLINES_IN_STATE);
+          if(message.symbol.toUpperCase() === pairSymbol.toUpperCase()) { // Ensure message is for current symbol
+            setMarketData({
+              klines: message.klines || [], // Ensure klines is always an array
+              indicators: message.indicators || null, // Ensure indicators can be null
+              lastMessageTimestamp: Date.now(), // Update timestamp to trigger re-render
+            });
+          } else {
+            console.warn(`WebSocket: Received data for ${message.symbol}, but subscribed to ${pairSymbol}. Ignoring.`);
           }
-          setMarketData(prev => ({
-            ...prev,
-            klines: updatedKlines,
-            indicators: message.indicators,
-            error: null,
-            lastMessageTimestamp: Date.now(),
-          }));
         } else if (message.type === 'error') {
-          console.error('WebSocket error message:', message.error);
-          setMarketData(prev => ({ ...prev, error: message.error || 'Unknown WebSocket error', isConnecting: false }));
+          console.error('WebSocket error message from server:', message.error);
+          setError(message.error || 'Unknown error from server');
+        } else {
+          // Handle other message types from your backend if necessary
+           console.log('WebSocket: Received unhandled message type:', (message as any).type);
         }
       } catch (e) {
-        console.error('Failed to parse WebSocket message:', e);
-        setMarketData(prev => ({ ...prev, error: 'Failed to process data from server.', isConnecting: false }));
+        console.error('WebSocket: Failed to parse message or handle it:', e, event.data);
+        setError('Error processing message from server.');
       }
     };
 
-    ws.onerror = (event) => {
+    webSocketRef.current.onerror = (event) => {
       console.error('WebSocket error event:', event);
-      setMarketData(prev => ({
-        ...prev,
-        isConnected: false,
-        isConnecting: false,
-        error: 'WebSocket connection error. Will attempt to fallback to polling.',
-      }));
+      setError('WebSocket connection error occurred.');
+      setIsConnected(false);
     };
 
-    ws.onclose = (event) => {
-      console.log(`WebSocket disconnected for ${symbol} ${interval}. Code: ${event.code}, Clean: ${event.wasClean}`);
-      if (webSocketRef.current === ws) {
-        webSocketRef.current = null; // Clear the ref since this instance is closed
-        setMarketData(prev => ({
-            ...prev,
-            isConnected: false,
-            isConnecting: false,
-        }));
-
-        if (shouldAttemptReconnectRef.current && symbol && interval) {
-            console.log("WebSocket closed, falling back to API polling.");
-            startPolling(); // Use the useCallback version of startPolling
-        } else {
-            console.log("WebSocket deliberately closed or no params, not starting polling.");
-        }
+    webSocketRef.current.onclose = (event) => {
+      console.log(`WebSocket disconnected for ${pairSymbol}. Clean: ${event.wasClean}, Code: ${event.code}, Reason: '${event.reason}'`);
+      setIsConnected(false);
+      // Do not attempt to reconnect if the closure was intentional (e.g., user logged out, changed pair)
+      // or if the closure was clean (code 1000) unless specifically desired.
+      // The current logic in useEffect will handle explicit disconnects/reconnects on pairSymbol/auth change.
+      if (!event.wasClean && event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current += 1;
+        console.log(`WebSocket: Attempting to reconnect (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`);
+        setTimeout(connectWebSocket, RECONNECT_DELAY_MS);
+      } else if (!event.wasClean && event.code !== 1000) {
+        const reconError = `Failed to reconnect to WebSocket for ${pairSymbol} after ${MAX_RECONNECT_ATTEMPTS} attempts.`;
+        setError(reconError);
+        console.error(reconError);
       }
     };
-  }, [symbol, interval, startPolling]); // Added startPolling to dependencies
+  }, [pairSymbol, isAuthenticated]); // isAuthenticated is crucial here
 
   useEffect(() => {
-    if (symbol && interval) {
+    if (pairSymbol && isAuthenticated) {
       connectWebSocket();
     } else {
       if (webSocketRef.current) {
-        shouldAttemptReconnectRef.current = false;
-        webSocketRef.current.close();
+        console.log("WebSocket: Closing due to no pairSymbol or !isAuthenticated.");
+        webSocketRef.current.onclose = null; // Prevent onclose handler from trying to reconnect
+        webSocketRef.current.close(1000, "Client initiated disconnect"); // Clean disconnect
         webSocketRef.current = null;
       }
-      stopPolling();
-      setMarketData({
-        klines: [],
-        indicators: { timestamps: [] },
-        isConnected: false,
-        isConnecting: false,
-        error: null,
-        lastMessageTimestamp: null,
-        isPolling: false,
-      });
+      setMarketData({ klines: [], indicators: null, lastMessageTimestamp: null }); // Clear data
+      setIsConnected(false);
     }
 
     return () => {
-      shouldAttemptReconnectRef.current = false;
       if (webSocketRef.current) {
-        webSocketRef.current.onclose = null;
-        webSocketRef.current.onerror = null;
-        webSocketRef.current.onmessage = null;
-        webSocketRef.current.onopen = null;
-        webSocketRef.current.close();
+        console.log(`WebSocket: Cleaning up connection for ${pairSymbol || 'N/A'}.`);
+        webSocketRef.current.onclose = null; // Important to prevent reconnect logic on unmount
+        webSocketRef.current.close(1000, "Component unmounting"); // Clean disconnect
         webSocketRef.current = null;
       }
-      stopPolling();
     };
-  }, [symbol, interval, connectWebSocket]);
+  }, [pairSymbol, isAuthenticated, connectWebSocket]);
 
-
-  const setInitialData = useCallback((data: { klines: Kline[], indicators: IndicatorData }) => {
-    setMarketData(prev => ({
-      ...prev,
-      klines: data.klines.slice(-MAX_KLINES_IN_STATE),
-      indicators: data.indicators,
-      error: null,
-    }));
+  const sendMessage = useCallback((message: object) => { // Kept if direct messaging needed
+    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+      webSocketRef.current.send(JSON.stringify(message));
+    } else {
+      console.warn('WebSocket is not connected. Cannot send message.');
+    }
   }, []);
 
-  const manualConnect = () => {
-    console.log("Manual connection attempt initiated.");
-    shouldAttemptReconnectRef.current = true;
-    connectWebSocket(true);
+  return {
+    klines: marketData.klines,
+    indicators: marketData.indicators,
+    lastMessageTimestamp: marketData.lastMessageTimestamp,
+    isConnected,
+    error,
+    sendMessage
   };
-
-  return { ...marketData, setInitialData, manualConnect, isPollingActive: marketData.isPolling };
 };
+
+export default useMarketDataWebSocket;

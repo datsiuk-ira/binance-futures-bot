@@ -1,13 +1,14 @@
-import React, { Suspense } from 'react'; // Suspense for loading translations
+// frontend/src/main.tsx
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom'; // Import BrowserRouter
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
-import './i18n'; // Імпорт конфігурації i18next
+import './i18n';
 import { CircularProgress, Box } from '@mui/material';
-import {AuthProvider} from "../context/AuthContext"; // For loading fallback
+import { AuthProvider } from "../context/AuthContext";
 
 
 const loadingMarkup = (
@@ -18,15 +19,16 @@ const loadingMarkup = (
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-        <Suspense fallback={loadingMarkup}> {/* ЦЕ ВАЖЛИВО */}
+    <BrowserRouter> {/* BrowserRouter now wraps AuthProvider */}
+      <AuthProvider> {/* AuthProvider is now INSIDE BrowserRouter */}
+        <Suspense fallback={loadingMarkup}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
+            {/* <App /> should contain your Routes, not another BrowserRouter */}
+            <App />
           </ThemeProvider>
         </Suspense>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   </React.StrictMode>,
 );

@@ -1,171 +1,136 @@
-// frontend/src/pages/DashboardPage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Container, Typography, Box, CircularProgress, Alert, Select, MenuItem, FormControl, InputLabel, Grid, SelectChangeEvent, Button } from '@mui/material'; // Added Button
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext'; // Using your provided AuthContext
+import useMarketDataWebSocket from '../hooks/useMarketDataWebSocket';
 import KlineChart from '../components/KlineChart';
-import { useMarketDataWebSocket } from '../hooks/useMarketDataWebSocket';
-import { getHistoricalIndicators } from '../api/marketDataService';
-import { IndicatorData, Kline } from '../types/marketData';
-
-const AVAILABLE_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT'];
-const AVAILABLE_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
+import { Kline, IndicatorData } from '../types/marketData';
+import { Box, Button, TextField, Typography, Paper, Grid, Alert, CircularProgress, Link as MuiLink, Container } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 
 const DashboardPage: React.FC = () => {
   const { t } = useTranslation();
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
-  const [selectedInterval, setSelectedInterval] = useState<string>('1m');
-  const [isLoadingInitialData, setIsLoadingInitialData] = useState<boolean>(false);
-  const [initialDataError, setInitialDataError] = useState<string | null>(null);
+  // Using fields from your current AuthContextType: user, isAuthenticated, logout, loading
+  const { user, isAuthenticated, logout, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  const [pairSymbolInput, setPairSymbolInput] = useState<string>('BTCUSDT');
+  const [activePairSymbol, setActivePairSymbol] = useState<string | null>(null);
 
   const {
-    klines: wsKlines,
-    indicators: wsIndicators,
+    klines,
+    indicators,
+    lastMessageTimestamp,
     isConnected,
-    isConnecting, // New state from hook
     error: wsError,
-    setInitialData,
-    manualConnect, // New function from hook
-    isPollingActive // New state from hook
-  } = useMarketDataWebSocket(selectedSymbol, selectedInterval);
+  } = useMarketDataWebSocket(activePairSymbol);
 
-  const [chartKlines, setChartKlines] = useState<Kline[]>([]);
-  const [chartIndicators, setChartIndicators] = useState<IndicatorData>({ timestamps: [] });
-
-  const fetchAndSetInitialData = useCallback(async (symbol: string, interval: string) => {
-    if (!symbol || !interval) return;
-
-    setIsLoadingInitialData(true);
-    setInitialDataError(null);
-    try {
-      const historicalData = await getHistoricalIndicators(symbol, interval, 500);
-      setInitialData({ klines: historicalData.klines, indicators: historicalData.indicators });
-      setChartKlines(historicalData.klines);
-      setChartIndicators(historicalData.indicators);
-    } catch (error: any) {
-      console.error('Failed to fetch initial chart data:', error);
-      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to load historical data.';
-      setInitialDataError(errorMessage);
-      setChartKlines([]);
-      setChartIndicators({ timestamps: [] });
-    } finally {
-      setIsLoadingInitialData(false);
+  const handleConnect = () => {
+    if (pairSymbolInput.trim()) {
+      const newSymbol = pairSymbolInput.trim().toUpperCase();
+      if (newSymbol !== activePairSymbol) {
+        setActivePairSymbol(newSymbol);
+      }
     }
-  }, [setInitialData]);
+  };
+
+  const handleDisconnect = () => {
+    setActivePairSymbol(null);
+  };
 
   useEffect(() => {
-    if (selectedSymbol && selectedInterval) {
-      setChartKlines([]);
-      setChartIndicators({ timestamps: [] });
-      fetchAndSetInitialData(selectedSymbol, selectedInterval);
-      // The hook will attempt to connect WebSocket based on selectedSymbol & selectedInterval
-    } else {
-      setChartKlines([]);
-      setChartIndicators({ timestamps: [] });
+    // Use authLoading (renamed from loading in context) to check if auth state is determined
+    if (!authLoading && !isAuthenticated) {
+      navigate('/login', { replace: true });
     }
-  }, [selectedSymbol, selectedInterval, fetchAndSetInitialData]);
+  }, [isAuthenticated, authLoading, navigate]);
 
-  useEffect(() => {
-    // This effect ensures that chart data updates whenever wsKlines or wsIndicators change,
-    // which can happen due to WebSocket messages or API polling updates via the hook.
-    if (wsKlines.length > 0 || isPollingActive) { // Update if we have WS klines OR if polling is active (which might also provide klines)
-        setChartKlines(wsKlines); // wsKlines from the hook will reflect either WS data or polled data
-        setChartIndicators(wsIndicators);
-    } else if (!isConnected && !isConnecting && !isPollingActive && wsKlines.length === 0) {
-        // If not connected, not attempting to connect, not polling, and no data, clear chart
-        // This can happen if symbol/interval are cleared or an unrecoverable error occurs.
-        // setChartKlines([]);
-        // setChartIndicators({ timestamps: [] });
-        // Initial data fetch will handle this better. This condition might be too aggressive.
-    }
-  }, [wsKlines, wsIndicators, isConnected, isConnecting, isPollingActive]);
+  const lastPrice = klines && klines.length > 0 ? klines[klines.length - 1].close : null;
 
-  const handleSymbolChange = (event: SelectChangeEvent<string>) => {
-    setSelectedSymbol(event.target.value as string);
-  };
-
-  const handleIntervalChange = (event: SelectChangeEvent<string>) => {
-    setSelectedInterval(event.target.value as string);
-  };
-
-  const getStatusMessage = () => {
-    if (isConnecting) return <span style={{ color: 'orange' }}>{t('dashboard.connecting', 'Connecting...')}</span>;
-    if (isConnected) return <span style={{ color: 'green' }}>{t('dashboard.connected', 'Connected to WebSocket')}</span>;
-    if (isPollingActive) return <span style={{ color: 'blue' }}>{t('dashboard.polling', 'Polling API for updates...')}</span>;
-    return <span style={{ color: 'red' }}>{t('dashboard.disconnected', 'Disconnected')}</span>;
-  };
+  // Show loading spinner if authentication is in progress
+  if (authLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        {t('dashboard.title', 'Trading Dashboard')}
-      </Typography>
-
-      <Grid container spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
-          <FormControl fullWidth>
-            <InputLabel id="symbol-select-label">{t('dashboard.symbol', 'Symbol')}</InputLabel>
-            <Select
-              labelId="symbol-select-label"
-              value={selectedSymbol}
-              label={t('dashboard.symbol', 'Symbol')}
-              onChange={handleSymbolChange}
-            >
-              {AVAILABLE_SYMBOLS.map((s) => (
-                <MenuItem key={s} value={s}>
-                  {s}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth>
-            <InputLabel id="interval-select-label">{t('dashboard.interval', 'Interval')}</InputLabel>
-            <Select
-              labelId="interval-select-label"
-              value={selectedInterval}
-              label={t('dashboard.interval', 'Interval')}
-              onChange={handleIntervalChange}
-            >
-              {AVAILABLE_INTERVALS.map((i) => (
-                <MenuItem key={i} value={i}>
-                  {i}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-            {!isConnected && !isConnecting && (
-                <Button variant="outlined" onClick={manualConnect} disabled={isConnecting || !selectedSymbol || !selectedInterval}>
-                    {t('dashboard.reconnectWs', 'Reconnect WebSocket')}
-                </Button>
-            )}
-
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle1">
-          {t('dashboard.status', 'Status')}: {getStatusMessage()}
-        </Typography>
-        {wsError && !isPollingActive && <Alert severity="warning" sx={{ mt: 1 }}>{t('dashboard.websocketError', 'WebSocket Error (will try polling)')}: {wsError}</Alert>}
-        {initialDataError && !isLoadingInitialData && <Alert severity="error" sx={{ mt: 1 }}>{initialDataError}</Alert>}
-      </Box>
-
-      <Box sx={{ height: 'auto', minHeight: '500px', border: '1px solid #ddd', p: 1, position: 'relative' }}>
-        {isLoadingInitialData && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 10 }}>
-            <CircularProgress />
-            <Typography sx={{ ml: 2 }}>{t('dashboard.loadingChartData', 'Loading chart data...')}</Typography>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography component="h1" variant="h5">
+            {t('dashboardPage.title')}
+            {/* Display username if user object is available */}
+            {user ? ` - Welcome, ${user.username}` : ''}
+          </Typography>
+          <Box>
+            <MuiLink component={RouterLink} to="/profile" sx={{ mr: 2 }}>
+              {t('dashboardPage.link.profile')}
+            </MuiLink>
+            <Button variant="outlined" onClick={async () => { await logout(); navigate('/login'); }}>
+              {t('dashboardPage.button.logout')}
+            </Button>
           </Box>
+        </Box>
+
+        <Grid container spacing={2} alignItems="center" sx={{ mb: 3 }}>
+            <TextField
+              fullWidth
+              label={t('dashboardPage.label.pairSymbol')}
+              value={pairSymbolInput}
+              onChange={(e) => setPairSymbolInput(e.target.value)}
+              variant="outlined"
+              disabled={isConnected}
+            />
+            {!isConnected ? (
+              <Button fullWidth variant="contained" color="primary" onClick={handleConnect} disabled={!pairSymbolInput.trim() || isConnected}>
+                {activePairSymbol && !isConnected && !wsError ? <CircularProgress size={24} color="inherit" /> : t('dashboardPage.button.connect')}
+              </Button>
+            ) : (
+              <Button fullWidth variant="contained" color="secondary" onClick={handleDisconnect}>
+                {t('dashboardPage.button.disconnect')}
+              </Button>
+            )}
+            <Typography variant="subtitle1">
+              {isConnected && activePairSymbol
+                ? `${t('dashboardPage.status.connectedTo')} ${activePairSymbol}`
+                : t('dashboardPage.status.disconnected')}
+            </Typography>
+            {lastPrice !== null && isConnected && (
+              <Typography variant="subtitle1">
+                {t('dashboardPage.label.lastPrice')}: {lastPrice}
+              </Typography>
+            )}
+          </Grid>
+
+        {wsError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {t('dashboardPage.error.websocket')}: {wsError}
+          </Alert>
         )}
 
-        {selectedSymbol && selectedInterval ? (
-            (chartKlines.length > 0 || !isLoadingInitialData || isPollingActive) ?
-                <KlineChart
-                    klines={chartKlines}
-                    indicators={chartIndicators}
-                    symbol={selectedSymbol}
-                />
-            : !isLoadingInitialData && <Typography>{t('dashboard.noDataForChart', 'No data available or still loading.')}</Typography>
-        ) : (
-            <Typography>{t('dashboard.selectSymbolInterval', 'Please select a symbol and interval.')}</Typography>
-        )}
-      </Box>
+        <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+          {t('dashboardPage.chart.title')} {activePairSymbol ? `(${activePairSymbol})` : ''}
+        </Typography>
+        <Box sx={{ height: 500, width: '100%', backgroundColor: '#f9f9f9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          {activePairSymbol && isConnected && klines && indicators ? (
+            <KlineChart
+              key={activePairSymbol + "_" + lastMessageTimestamp}
+              klines={klines}
+              indicators={indicators}
+              symbol={activePairSymbol}
+            />
+          ) : (
+            <Typography>
+              {activePairSymbol && !wsError ? t('dashboardPage.status.connecting') : t('dashboardPage.label.noData')}
+            </Typography>
+          )}
+          {activePairSymbol && !isConnected && !wsError && (
+             <CircularProgress sx={{position: 'absolute'}}/>
+          )}
+        </Box>
+      </Paper>
     </Container>
   );
 };

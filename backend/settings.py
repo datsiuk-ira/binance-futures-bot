@@ -9,6 +9,8 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
+from datetime import timedelta
+
 import environ
 from pathlib import Path
 from django.utils.translation import gettext_lazy as _
@@ -66,7 +68,6 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True # НЕ для production!
-
 CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'backend.urls'
@@ -94,6 +95,14 @@ REST_FRAMEWORK = {
     ),
 }
 
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60), # Example: 1 hour
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Example: 1 day
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True, # Requires separate app for blacklist
+    # ... other JWT settings
+}
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -119,20 +128,19 @@ CELERY_TASK_SERIALIZER = "json"
 ASGI_APPLICATION = 'backend.asgi.application'
 REDIS_URL = env('REDIS_URL')
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
 # CHANNEL_LAYERS = {
 #     'default': {
-#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         'CONFIG': {
-#             # "hosts": [REDIS_URL], # Використовуйте один рядок URL для Redis
-#             "hosts": [('redis', 6379)], # Або так, якщо REDIS_URL не використовується
-#         },
+#         'BACKEND': 'channels.layers.InMemoryChannelLayer',
 #     },
 # }
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('redis', 6379)], # Ensure 'redis' is the service name in docker-compose
+        },
+    },
+}
 
 
 # Password validation

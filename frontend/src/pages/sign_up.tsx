@@ -1,86 +1,145 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { signUp } from "../api/auth"; // Ensure this API function returns the response data
-import AuthForm from "../components/AuthForm"; // Check your path: componets/ or components/
-import { toast } from 'react-toastify';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext'; // Assuming signUp is added here
 import { useTranslation } from 'react-i18next';
-import {Link as RouterLink} from "react-router-dom";
-import {Link} from "@mui/material";
+import { TextField, Button, Container, Typography, Box, Alert, CircularProgress, Link } from '@mui/material';
 
-export default function SignUp() {
+const SignUpPage: React.FC = () => {
   const { t } = useTranslation();
+  const { signUp, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleSignUp = async (email: string, password: string) => {
-    setIsLoading(true);
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  const validateEmail = (emailToValidate: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToValidate);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setFormError(null);
-    try {
-      const response = await signUp({ email, password }); // Capture the response
-      // Assuming response.data contains { email, access, refresh }
-      if (response.data && response.data.access && response.data.refresh) {
-        localStorage.setItem("accessToken", response.data.access);
-        localStorage.setItem("refreshToken", response.data.refresh);
-        toast.success(t('signUp.successfulAndLoggedIn')); // New translation key
-        navigate("/profile"); // Navigate to profile directly
-      } else {
-        // Fallback if tokens are not returned, though they should be
-        toast.success(t('signUp.successfulPleaseLogin'));
-        navigate("/login");
-      }
-    } catch (error: any) {
-      console.error("Sign up failed:", error);
-      let errorMessage = t('signUp.failedDefault');
-      if (error.response && error.response.data) {
-        const errors = error.response.data;
-        let messages = [];
-        let emailExists = false;
-        for (const key in errors) {
-          const fieldErrorKey = `form.${key}Label`;
-          const translatedKey = t(fieldErrorKey, { defaultValue: key });
-          if (Array.isArray(errors[key])) {
-            const fieldErrors = errors[key].join(", ");
-            messages.push(`${translatedKey}: ${fieldErrors}`);
-            if (key === 'email' && (fieldErrors.toLowerCase().includes('already exists') || fieldErrors.toLowerCase().includes('вже існує'))) {
-                emailExists = true;
-            }
-          } else {
-            messages.push(`${translatedKey}: ${errors[key]}`);
-            if (key === 'email' && (errors[key].toLowerCase().includes('already exists') || errors[key].toLowerCase().includes('вже існує'))) {
-                emailExists = true;
-            }
-          }
-        }
-        if (messages.length > 0) {
-          errorMessage = messages.join("\n");
-        }
-        setFormError(errorMessage);
+    setSuccessMessage(null);
 
-        if (emailExists) {
-          toast.info(
-            <div>
-              {t('signUp.emailExistsSuggestion')}{' '}
-              <Link component={RouterLink} to="/login" style={{ color: '#fff', fontWeight: 'bold' }}>
-                   {t('login.link')}
-              </Link>
-            </div>,
-            { autoClose: 8000 }
-          );
-        }
-      } else if (error.message) {
-        setFormError(error.message);
-      } else {
-        setFormError(errorMessage);
-      }
-    } finally {
-      setIsLoading(false);
+    if (!username || !email || !password) {
+      setFormError(t('signUpPage.error.fieldsRequired'));
+      return;
+    }
+    if (!validateEmail(email)) {
+      setFormError(t('signUpPage.error.emailInvalid'));
+      return;
+    }
+    if (password.length < 6) { // Example: Basic password length validation
+      setFormError(t('signUpPage.error.passwordTooShort'));
+      return;
+    }
+
+    try {
+      const response = await signUp({ username, email, password });
+      setSuccessMessage(response.message || t('signUpPage.success'));
+      // Optional: redirect after a delay or let user click a link
+      // setTimeout(() => navigate('/login'), 3000);
+    } catch (err: any) {
+      setFormError(err.message || t('signUpPage.error.generic'));
     }
   };
 
-  const clearFormError = () => {
-    setFormError(null);
+  if (loading && !formError && !successMessage) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    );
   }
 
-  return <AuthForm onSubmit={handleSignUp} submitTextKey="signUp.submitButton" isLoading={isLoading} formError={formError} clearFormError={clearFormError} />;
-}
+  return (
+    <Container component="main" maxWidth="xs">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Typography component="h1" variant="h5">
+          {t('signUpPage.title')}
+        </Typography>
+        {formError && (
+          <Alert severity="error" sx={{ width: '100%', mt: 2 }}>
+            {formError}
+          </Alert>
+        )}
+        {successMessage && (
+          <Alert severity="success" sx={{ width: '100%', mt: 2 }}>
+            {successMessage}
+          </Alert>
+        )}
+        {!successMessage && ( // Hide form on success
+          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="username"
+              label={t('signUpPage.label.username')}
+              name="username"
+              autoComplete="username"
+              autoFocus
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="email"
+              label={t('signUpPage.label.email')}
+              name="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="password"
+              label={t('signUpPage.label.password')}
+              type="password"
+              id="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : t('signUpPage.button.signUp')}
+            </Button>
+          </Box>
+        )}
+        <Box textAlign="center" sx={{ mt: 2 }}>
+          <Link component={RouterLink} to="/login" variant="body2">
+            {t('signUpPage.link.signIn')}
+          </Link>
+        </Box>
+      </Box>
+    </Container>
+  );
+};
+
+export default SignUpPage;
