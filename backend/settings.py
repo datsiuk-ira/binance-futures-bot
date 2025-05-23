@@ -9,10 +9,13 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
+import os
 from datetime import timedelta
 
 import environ
 from pathlib import Path
+
+from celery.schedules import crontab
 from django.utils.translation import gettext_lazy as _
 from decouple import config, Csv
 
@@ -53,6 +56,7 @@ INSTALLED_APPS = [
     'trades.apps.TradesConfig',
     'users.apps.UsersConfig',
     'websocket.apps.WebsocketConfig',
+    'django_celery_beat'
 ]
 
 MIDDLEWARE = [
@@ -117,13 +121,6 @@ DATABASES = {
     }
 }
 
-
-# Celery setup
-CELERY_BROKER_URL = env("REDIS_URL")
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-
-
 # Channels (WebSocket)
 ASGI_APPLICATION = 'backend.asgi.application'
 REDIS_URL = env('REDIS_URL')
@@ -133,11 +130,14 @@ REDIS_URL = env('REDIS_URL')
 #         'BACKEND': 'channels.layers.InMemoryChannelLayer',
 #     },
 # }
+CHANNELS_REDIS_HOST = env('CHANNELS_REDIS_HOST') # Читаємо з середовища
+CHANNELS_REDIS_PORT = env.int('CHANNELS_REDIS_PORT') # Читаємо з середовища
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('redis', 6379)], # Ensure 'redis' is the service name in docker-compose
+            "hosts": [(CHANNELS_REDIS_HOST, CHANNELS_REDIS_PORT)],
         },
     },
 }
@@ -218,3 +218,93 @@ MAX_KLINES_MEMORY_FOR_INDICATORS = config('MAX_KLINES_MEMORY_FOR_INDICATORS', de
 
 # Maximum number of klines to fetch for historical data API endpoint
 MAX_KLINES_HISTORICAL_FETCH = config('MAX_KLINES_HISTORICAL_FETCH', default=1000, cast=int)
+
+
+# Celery setup
+CELERY_BROKER_URL = env("REDIS_URL", default="redis://redis:6379/0")
+CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://redis:6379/0")
+CELERY_ACCEPT_CONTENT = ["json", "pickle"] # Додаємо 'pickle' для деяких випадків, але 'json' краще для сумісності
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE # Використовувати часову зону Django
+CELERY_TASK_TRACK_STARTED = True # Якщо хочете бачити, коли таски стартують
+CELERY_TASK_TIME_LIMIT = 30 * 60
+
+CELERY_BEAT_SCHEDULE = {
+    'fetch-btcusdt-1m-data-every-minute': {
+        'task': 'fetch_and_send_market_data', # Повна назва таску (якщо не вказано name в @shared_task)
+                                            # або 'celery_tasks.tasks.fetch_and_send_market_data_task'
+                                            # або name="fetch_and_send_market_data" з декоратора
+        'schedule': crontab(minute='*'),  # Запускати кожну хвилину
+        'args': ('BTCUSDT', '1m'),       # Аргументи для таску: (pair_symbol, interval)
+        'kwargs': {'limit': 20}       # Можна передавати іменовані аргументи
+    },
+    'fetch-ethusdt-5m-data-every-5-minutes': {
+        'task': 'fetch_and_send_market_data',
+        'schedule': crontab(minute='*/5'), # Запускати кожні 5 хвилин
+        'args': ('ETHUSDT', '5m'),
+        'kwargs': {'limit': 20}
+    },
+    # Додайте інші пари/інтервали за потребою
+}
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG', # Встановлюємо рівень DEBUG для обробника консолі
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose', # Можна використовувати 'simple' для коротших логів
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO', # Логи від самого Django
+            'propagate': True,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING', # Зазвичай багато INFO логів про запити
+            'propagate': False,
+        },
+        'celery': { # Логи від Celery (якщо потрібно бачити їх і тут)
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'websocket': { # Логер для вашого додатку websocket (включаючи consumers.py)
+            'handlers': ['console'],
+            'level': 'DEBUG', # Встановлюємо рівень DEBUG
+            'propagate': True,
+        },
+        # Можна додати інші специфічні логери для ваших додатків
+        # наприклад, 'celery_tasks', 'indicators'
+        'celery_tasks': {
+             'handlers': ['console'],
+             'level': 'DEBUG',
+             'propagate': True,
+        },
+        'indicators': {
+             'handlers': ['console'],
+             'level': 'DEBUG',
+             'propagate': True,
+        }
+    },
+    'root': { # Кореневий логер, який буде ловити все, що не оброблено іншими
+        'handlers': ['console'],
+        'level': 'INFO', # Загальний рівень для всього іншого
+    }
+}

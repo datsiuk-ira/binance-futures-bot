@@ -18,50 +18,85 @@ services:
     image: redis:7-alpine
     container_name: trading_bot_redis
     ports:
-      - "6379:6379"
+      - "6378:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - app_network
     restart: unless-stopped
 
-  backend:
+#  backend:
+#    build:
+#      context: .
+#      dockerfile: docker/Dockerfile.backend
+#    container_name: binance_backend
+#    volumes:
+#      - .:/app
+#    command: >
+#      sh -c "python manage.py migrate &&
+#             python manage.py collectstatic --noinput &&
+#             gunicorn backend.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+#    ports:
+#      - "8000:8000"
+#    env_file:
+#      - .env
+#    depends_on:
+#      db:
+#        condition: service_started # Або service_healthy, якщо є healthcheck
+#      redis:
+#        condition: service_started
+#    networks:
+#      - app_network
+#    restart: unless-stopped
+
+  celery_worker:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
-    container_name: binance_backend
+    command: celery -A backend worker -l info
     volumes:
       - .:/app
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn backend.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
-    ports:
-      - "8000:8000"
     env_file:
-      - .env
+      - .env_celery
     depends_on:
-      db:
-        condition: service_started # Або service_healthy, якщо є healthcheck
-      redis:
-        condition: service_started
+      - redis
+#      - backend
     networks:
       - app_network
-    restart: unless-stopped
 
-  frontend:
+  celery_beat:
     build:
       context: .
-      dockerfile: docker/Dockerfile.frontend
-    container_name: binance_frontend
-    ports:
-      - "3000:80" # Nginx in container runs on 80, mapped to host 3000
+      dockerfile: docker/Dockerfile.backend
+    command: celery -A backend beat -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env_celery
     depends_on:
-      - backend
+      - redis
+#      - backend
     networks:
       - app_network
-    restart: unless-stopped
+
+#  frontend:
+#    build:
+#      context: .
+#      dockerfile: docker/Dockerfile.frontend
+#    container_name: binance_frontend
+#    ports:
+#      - "3000:80" # Nginx in container runs on 80, mapped to host 3000
+#    depends_on:
+#      - backend
+#    networks:
+#      - app_network
+#    restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
 
 networks:
   app_network:

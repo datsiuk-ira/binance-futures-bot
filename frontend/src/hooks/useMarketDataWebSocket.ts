@@ -1,161 +1,176 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Kline, IndicatorData, MarketDataMessage } from '../types/marketData'; // Updated import
-import { useAuth } from '../../context/AuthContext'; // For isAuthenticated
+import {useState, useEffect, useRef, useCallback} from 'react';
+import {Kline, IndicatorData, MarketDataMessage} from '../types/marketData';
+import {useAuth} from '../../context/AuthContext';
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 3000;
 
 interface WebSocketHookData {
-  klines: Kline[];
-  indicators: IndicatorData | null;
-  lastMessageTimestamp: number | null; // To help trigger re-renders in chart
+    klines: Kline[];
+    indicators: IndicatorData | null;
+    lastMessageTimestamp: number | null;
 }
 
-const useMarketDataWebSocket = (pairSymbol: string | null) => {
-  const { isAuthenticated } = useAuth(); // Get authentication status
-  const [marketData, setMarketData] = useState<WebSocketHookData>({
-    klines: [],
-    indicators: null,
-    lastMessageTimestamp: null,
-  });
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const webSocketRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptsRef = useRef<number>(0);
+// Added interval to the hook's parameters
+const useMarketDataWebSocket = (pairSymbol: string | null, interval: string | null) => {
+    const {isAuthenticated} = useAuth();
+    const [marketData, setMarketData] = useState<WebSocketHookData>({
+        klines: [],
+        indicators: null,
+        lastMessageTimestamp: null,
+    });
+    const [isConnected, setIsConnected] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const webSocketRef = useRef<WebSocket | null>(null);
+    const reconnectAttemptsRef = useRef<number>(0);
 
-  const connectWebSocket = useCallback(() => {
-    if (!pairSymbol || !isAuthenticated) {
-      console.log("WebSocket: Prerequisites not met (pairSymbol or !isAuthenticated). Current auth state:", isAuthenticated);
-      if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
-        webSocketRef.current.close();
-      }
-      setMarketData({ klines: [], indicators: null, lastMessageTimestamp: null }); // Clear data
-      setIsConnected(false);
-      return;
-    }
-
-    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
-      // If already connected to the same pair, do nothing.
-      if (webSocketRef.current.url.includes(`/${pairSymbol.toLowerCase()}/`)) {
-        console.log("WebSocket already connected for", pairSymbol);
-        return;
-      }
-      // If connected to a different pair, close the old connection first
-      console.log("WebSocket closing old connection to connect to new pair:", pairSymbol);
-      webSocketRef.current.close();
-    }
-
-    const VITE_WS_BASE_URL = 'ws://localhost:8000/ws';
-    // Ensure token is appended if your WebSocket backend requires it for auth
-    // For example, if using the TokenAuthMiddleware discussed previously:
-    // const token = localStorage.getItem('accessToken'); // Or wherever your token is
-    // const wsUrl = `${VITE_WS_BASE_URL}/market-data/${pairSymbol.toLowerCase()}/?token=${token}`;
-    const wsUrl = `${VITE_WS_BASE_URL}/market-data/${pairSymbol.toLowerCase()}/`; // Original, if no token in query
-
-    console.log(`WebSocket: Attempting to connect to: ${wsUrl}`);
-    webSocketRef.current = new WebSocket(wsUrl);
-
-    webSocketRef.current.onopen = () => {
-      console.log(`WebSocket connected for ${pairSymbol}`);
-      setIsConnected(true);
-      setError(null);
-      reconnectAttemptsRef.current = 0;
-      // Clear any stale data from previous connections
-      setMarketData({ klines: [], indicators: null, lastMessageTimestamp: Date.now() });
-    };
-
-    webSocketRef.current.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data as string) as MarketDataMessage;
-        console.log('WebSocket message received:', message.type, message.symbol);
-
-        if (message.type === 'kline_with_indicators') {
-          if(message.symbol.toUpperCase() === pairSymbol.toUpperCase()) { // Ensure message is for current symbol
-            setMarketData({
-              klines: message.klines || [], // Ensure klines is always an array
-              indicators: message.indicators || null, // Ensure indicators can be null
-              lastMessageTimestamp: Date.now(), // Update timestamp to trigger re-render
-            });
-          } else {
-            console.warn(`WebSocket: Received data for ${message.symbol}, but subscribed to ${pairSymbol}. Ignoring.`);
-          }
-        } else if (message.type === 'error') {
-          console.error('WebSocket error message from server:', message.error);
-          setError(message.error || 'Unknown error from server');
+    const sendMessage = useCallback((message: object) => {
+        if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+            webSocketRef.current.send(JSON.stringify(message));
         } else {
-          // Handle other message types from your backend if necessary
-           console.log('WebSocket: Received unhandled message type:', (message as any).type);
+            console.warn('WebSocket is not connected. Cannot send message.');
         }
-      } catch (e) {
-        console.error('WebSocket: Failed to parse message or handle it:', e, event.data);
-        setError('Error processing message from server.');
-      }
+    }, []);
+
+    const connectWebSocket = useCallback(() => {
+        if (!pairSymbol || !isAuthenticated || !interval) {
+            console.log("WebSocket: Prerequisites not met (pairSymbol, interval, or !isAuthenticated). Current auth state:", isAuthenticated, "Pair:", pairSymbol, "Interval:", interval);
+            if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+                webSocketRef.current.close();
+            }
+            setMarketData({klines: [], indicators: null, lastMessageTimestamp: null});
+            setIsConnected(false);
+            return;
+        }
+
+        const currentWsUrl = webSocketRef.current?.url;
+        const newWsUrlPath = `/market-data/${pairSymbol.toLowerCase()}/`;
+
+        if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+            if (currentWsUrl && currentWsUrl.includes(newWsUrlPath)) {
+                // If connected to the same pair, but interval might have changed,
+                // we can send a new subscription message without full reconnect.
+                // However, if interval change requires full reset, a full reconnect is fine too.
+                // For now, if pair is same, assume interval update will be handled by sending subscribe_kline.
+                console.log("WebSocket already connected for", pairSymbol, "checking interval.");
+                sendMessage({
+                    type: 'subscribe_kline',
+                    payload: {interval: interval},
+                });
+                return; // Already connected, just sent subscription update
+            }
+            console.log("WebSocket closing old connection to connect to new pair/url:", pairSymbol);
+            webSocketRef.current.close();
+        }
+
+        const VITE_WS_BASE_URL = 'ws://localhost:8000/ws';
+        const wsUrl = `${VITE_WS_BASE_URL}/market-data/${pairSymbol.toLowerCase()}/`;
+
+        console.log(`WebSocket: Attempting to connect to: ${wsUrl}`);
+        webSocketRef.current = new WebSocket(wsUrl);
+
+        webSocketRef.current.onopen = () => {
+            console.log(`WebSocket connected for ${pairSymbol} with interval ${interval}`);
+            setIsConnected(true);
+            setError(null);
+            reconnectAttemptsRef.current = 0;
+            setMarketData({klines: [], indicators: null, lastMessageTimestamp: Date.now()});
+
+            // Send subscription message for klines with the specified interval
+            sendMessage({
+                type: 'subscribe_kline',
+                payload: {interval: interval},
+            });
+        };
+
+        webSocketRef.current.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data as string) as MarketDataMessage;
+                console.log('WebSocket message received:', message.type, message.symbol, message.interval);
+
+                if (message.type === 'kline_with_indicators') {
+                    if (message.symbol && message.symbol.toUpperCase() === pairSymbol?.toUpperCase() &&
+                        message.interval && message.interval === interval) { // `interval` тут - це `activeInterval` з DashboardPage
+                        setMarketData({
+                            klines: message.klines || [],
+                            indicators: message.indicators || null,
+                            lastMessageTimestamp: Date.now(),
+                        });
+                    } else {
+                        console.log(`WebSocket: Ignoring data for <span class="math-inline">\{message\.symbol\}@</span>{message.interval} (expected <span class="math-inline">\{pairSymbol\}@</span>{interval})`);
+                    }
+                } else if (message.type === 'error') {
+                    console.error('WebSocket error message from server:', message.error);
+                    setError(message.error || 'Unknown error from server');
+                } else if (message.type === 'subscription_ack') {
+                    console.log('WebSocket subscription acknowledged by server:', message);
+                } else if (message.type === 'connection_established') {
+                    console.log('WebSocket connection established message from server:', message);
+                } else if (message.type === 'pong') {
+                    console.log('WebSocket pong received from server.');
+                } else {
+                    console.log('WebSocket: Received unhandled message type:', (message as any).type, message);
+                }
+            } catch (e) {
+                console.error('WebSocket: Failed to parse message or handle it:', e, event.data);
+                setError('Error processing message from server.');
+            }
+        };
+
+        webSocketRef.current.onerror = (event) => {
+            console.error('WebSocket error event:', event);
+            setError('WebSocket connection error occurred.');
+            setIsConnected(false);
+        };
+
+        webSocketRef.current.onclose = (event) => {
+            console.log(`WebSocket disconnected for ${pairSymbol}. Clean: ${event.wasClean}, Code: ${event.code}, Reason: '${event.reason}'`);
+            setIsConnected(false);
+            if (!event.wasClean && event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttemptsRef.current += 1;
+                console.log(`WebSocket: Attempting to reconnect (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`);
+                setTimeout(connectWebSocket, RECONNECT_DELAY_MS);
+            } else if (!event.wasClean && event.code !== 1000) {
+                const reconError = `Failed to reconnect to WebSocket for ${pairSymbol} after ${MAX_RECONNECT_ATTEMPTS} attempts.`;
+                setError(reconError);
+                console.error(reconError);
+            }
+        };
+    }, [pairSymbol, isAuthenticated, interval, sendMessage]); // Added interval and sendMessage
+
+    useEffect(() => {
+        if (pairSymbol && isAuthenticated && interval) { // Added interval check
+            connectWebSocket();
+        } else {
+            if (webSocketRef.current) {
+                console.log("WebSocket: Closing due to no pairSymbol, interval, or !isAuthenticated.");
+                webSocketRef.current.onclose = null;
+                webSocketRef.current.close(1000, "Client initiated disconnect");
+                webSocketRef.current = null;
+            }
+            setMarketData({klines: [], indicators: null, lastMessageTimestamp: null});
+            setIsConnected(false);
+        }
+
+        return () => {
+            if (webSocketRef.current) {
+                console.log(`WebSocket: Cleaning up connection for ${pairSymbol || 'N/A'}.`);
+                webSocketRef.current.onclose = null;
+                webSocketRef.current.close(1000, "Component unmounting");
+                webSocketRef.current = null;
+            }
+        };
+    }, [pairSymbol, isAuthenticated, interval, connectWebSocket]); // Added interval
+
+    // Expose sendMessage for other uses if needed, but internal use is primary for subscription
+    return {
+        klines: marketData.klines,
+        indicators: marketData.indicators,
+        lastMessageTimestamp: marketData.lastMessageTimestamp,
+        isConnected,
+        error,
+        sendMessage // Exposed sendMessage
     };
-
-    webSocketRef.current.onerror = (event) => {
-      console.error('WebSocket error event:', event);
-      setError('WebSocket connection error occurred.');
-      setIsConnected(false);
-    };
-
-    webSocketRef.current.onclose = (event) => {
-      console.log(`WebSocket disconnected for ${pairSymbol}. Clean: ${event.wasClean}, Code: ${event.code}, Reason: '${event.reason}'`);
-      setIsConnected(false);
-      // Do not attempt to reconnect if the closure was intentional (e.g., user logged out, changed pair)
-      // or if the closure was clean (code 1000) unless specifically desired.
-      // The current logic in useEffect will handle explicit disconnects/reconnects on pairSymbol/auth change.
-      if (!event.wasClean && event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttemptsRef.current += 1;
-        console.log(`WebSocket: Attempting to reconnect (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`);
-        setTimeout(connectWebSocket, RECONNECT_DELAY_MS);
-      } else if (!event.wasClean && event.code !== 1000) {
-        const reconError = `Failed to reconnect to WebSocket for ${pairSymbol} after ${MAX_RECONNECT_ATTEMPTS} attempts.`;
-        setError(reconError);
-        console.error(reconError);
-      }
-    };
-  }, [pairSymbol, isAuthenticated]); // isAuthenticated is crucial here
-
-  useEffect(() => {
-    if (pairSymbol && isAuthenticated) {
-      connectWebSocket();
-    } else {
-      if (webSocketRef.current) {
-        console.log("WebSocket: Closing due to no pairSymbol or !isAuthenticated.");
-        webSocketRef.current.onclose = null; // Prevent onclose handler from trying to reconnect
-        webSocketRef.current.close(1000, "Client initiated disconnect"); // Clean disconnect
-        webSocketRef.current = null;
-      }
-      setMarketData({ klines: [], indicators: null, lastMessageTimestamp: null }); // Clear data
-      setIsConnected(false);
-    }
-
-    return () => {
-      if (webSocketRef.current) {
-        console.log(`WebSocket: Cleaning up connection for ${pairSymbol || 'N/A'}.`);
-        webSocketRef.current.onclose = null; // Important to prevent reconnect logic on unmount
-        webSocketRef.current.close(1000, "Component unmounting"); // Clean disconnect
-        webSocketRef.current = null;
-      }
-    };
-  }, [pairSymbol, isAuthenticated, connectWebSocket]);
-
-  const sendMessage = useCallback((message: object) => { // Kept if direct messaging needed
-    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
-      webSocketRef.current.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket is not connected. Cannot send message.');
-    }
-  }, []);
-
-  return {
-    klines: marketData.klines,
-    indicators: marketData.indicators,
-    lastMessageTimestamp: marketData.lastMessageTimestamp,
-    isConnected,
-    error,
-    sendMessage
-  };
 };
 
 export default useMarketDataWebSocket;

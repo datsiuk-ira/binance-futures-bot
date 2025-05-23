@@ -1,20 +1,17 @@
+# websocket/consumers.py
 import json
 import asyncio
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-# from binance_connector.client import BinanceClient # If needed for fetching initial data
-# from django.conf import settings # If using API keys directly here
+# from channels.db import database_sync_to_async # Якщо не використовується
+
+logger = logging.getLogger(__name__)
 
 class MarketDataConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.pair_symbol = self.scope['url_route']['kwargs']['pair_symbol'].lower()
         self.room_group_name = f'market_data_{self.pair_symbol}'
-
-        # Check if user is authenticated (if your WebSockets require authentication)
-        # user = self.scope.get('user', None)
-        # if user is None or not user.is_authenticated:
-        #     await self.close()
-        #     return
+        self.current_interval = '1m' # Можна отримувати від клієнта
 
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -25,22 +22,20 @@ class MarketDataConsumer(AsyncWebsocketConsumer):
             'type': 'connection_established',
             'message': f'Connected to market data for {self.pair_symbol.upper()}'
         }))
-        # Example: Start a task to stream data if this consumer is responsible for it
-        # asyncio.create_task(self.stream_binance_data())
-
+        logger.info(f"WebSocket connected for {self.pair_symbol}, added to group {self.room_group_name}")
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
-        print(f"WebSocket disconnected for {self.pair_symbol} with code: {close_code}")
-
+        logger.info(f"WebSocket disconnected for {self.pair_symbol} from group {self.room_group_name}")
 
     async def receive(self, text_data=None, bytes_data=None):
-        """
-        Handles messages received from the WebSocket client.
-        """
+        # Цей метод тепер в основному для керуючих повідомлень від клієнта,
+        # наприклад, зміна підписки на інтервал, якщо це потрібно динамічно
+        # змінювати для Celery тасків (це складніше).
+        # Або для ping/pong.
         try:
             if text_data:
                 text_data_json = json.loads(text_data)
@@ -48,63 +43,56 @@ class MarketDataConsumer(AsyncWebsocketConsumer):
                 payload = text_data_json.get('payload')
 
                 if message_type == 'subscribe_kline':
-                    # Example: Client wants to subscribe to kline updates for a specific interval
-                    interval = payload.get('interval', '1m') # Default to 1 minute
-                    # Logic to handle kline subscription, potentially start a new stream or adjust existing
+                    # Клієнт надсилає бажаний інтервал.
+                    # Зараз Celery Beat працює за фіксованим розкладом з settings.py.
+                    # Щоб динамічно змінювати інтервали для Celery, потрібна складніша логіка:
+                    # - Зберігати активні підписки (символ, інтервал, канал)
+                    # - Celery таск (або інший механізм) має вирішувати, які дані генерувати
+                    #   на основі активних підписок.
+                    # - Або мати окремі Celery Beat розклади для кожного інтервалу,
+                    #   а клієнт просто підключається до кімнати відповідного символу,
+                    #   а дані для різних інтервалів надсилаються в ту ж групу,
+                    #   але з різним полем 'interval' у повідомленні.
+                    #   Фронтенд тоді фільтрує потрібний інтервал.
+                    #
+                    # Для простоти поки що цей subscribe_kline може бути лише для підтвердження.
+                    # Або, якщо ви хочете мати ОДИН Celery таск, що періодично запитує дані
+                    # для КОЖНОГО активного підключення з його інтервалом - це теж можливо,
+                    # але потребує зберігання стану підключень.
+
+                    interval = payload.get('interval', '1m')
+                    self.current_interval = interval # Зберігаємо для контексту
+                    logger.info(f"Client for {self.pair_symbol} expressed interest in interval: {interval}")
                     await self.send(text_data=json.dumps({
                         'type': 'subscription_ack',
-                        'message': f'Subscribed to klines for {self.pair_symbol.upper()} interval {interval}'
+                        'message': f'Subscription preference for {interval} noted. Market data is pushed by scheduled tasks.'
                     }))
                 elif message_type == 'ping':
                     await self.send(text_data=json.dumps({'type': 'pong'}))
                 else:
-                    # Generic message handling or echo
-                    print(f"Received unknown message type from client: {text_data_json}")
-                    await self.send(text_data=json.dumps({
-                        'type': 'echo',
-                        'message': text_data_json
-                    }))
-            else:
-                 print("Received non-text data, ignoring.")
-
-        except json.JSONDecodeError:
-            print("Received invalid JSON from client.")
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': 'Invalid JSON format.'
-            }))
+                    logger.warning(f"Received unknown message type from client: {text_data_json}")
         except Exception as e:
-            print(f"Error processing message from client: {e}")
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': f'An error occurred: {str(e)}'
-            }))
+            logger.error(f"Error in MarketDataConsumer.receive: {e}", exc_info=True)
 
 
     async def market_data_update(self, event):
         """
-        Handles messages sent from the backend (e.g., Celery task) to the group.
-        This method name should match the 'type' in channel_layer.group_send()
+        Обробляє повідомлення, надіслані з Celery таску до групи.
         """
-        message = event['message'] # The actual data payload
+        try:
+            logger.debug(f"Consumer for {self.pair_symbol} received market_data_update event: {event}")
+            message_payload = event.get('message_payload', {})
+            event_interval = event.get('interval', 'unknown_interval')
 
-        await self.send(text_data=json.dumps({
-            'type': 'market_update', # Or kline_update, trade_update etc.
-            'pair': self.pair_symbol.upper(),
-            'data': message
-        }))
-
-    # Example of how a Celery task might send data to this consumer group:
-    # from channels.layers import get_channel_layer
-    # from asgiref.sync import async_to_sync
-    #
-    # def send_update_to_frontend(pair_symbol, data):
-    #     channel_layer = get_channel_layer()
-    #     room_group_name = f'market_data_{pair_symbol.lower()}'
-    #     async_to_sync(channel_layer.group_send)(
-    #         room_group_name,
-    #         {
-    #             'type': 'market_data_update', # This calls the market_data_update method in consumer
-    #             'message': data
-    #         }
-    #     )
+            # Важливо: надсилаємо дані клієнту
+            await self.send(text_data=json.dumps({
+                'type': 'kline_with_indicators',
+                'symbol': self.pair_symbol.upper(), # Символ з URL цього consumer'a
+                'interval': event_interval, # Інтервал з Celery таску
+                'klines': message_payload.get('klines', []),
+                'indicators': message_payload.get('indicators', None),
+                'error': message_payload.get('error', None)
+            }))
+            logger.debug(f"Sent kline_with_indicators for {self.pair_symbol} {event_interval} to client {self.channel_name}")
+        except Exception as e:
+            logger.error(f"Error in MarketDataConsumer.market_data_update: {e}", exc_info=True)

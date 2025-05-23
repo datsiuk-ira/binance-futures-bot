@@ -6,6 +6,7 @@ __pycache__/
 *.sqlite3
 *.env
 .env
+.env_celery
 *.log
 *.DS_Store
 node_modules/
