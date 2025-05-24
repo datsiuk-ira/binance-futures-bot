@@ -96,7 +96,26 @@
     "status": "Status",
     "connecting": "Connecting...",
     "polling": "Polling API for updates...",
-    "reconnectWs": "Reconnect WebSocket"
+    "reconnectWs": "Reconnect WebSocket",
+    "indicators": {
+      "adx": "ADX",
+      "atr": "ATR",
+      "ichimoku": "Ichimoku",
+      "fibonacci": "Fib",
+      "vwap": "VWAP",
+      "arima": "ARIMA"
+    },
+    "signalAnalysis": {
+      "detailKeys": {
+        "macd_histogram": "MACD Histogram",
+        "adx_value": "ADX Value",
+        "vwap_value": "VWAP Value",
+        "price_vs_vwap": "Price vs VWAP",
+        "ichimoku_tenkan": "Tenkan-sen",
+        "ichimoku_kijun": "Kijun-sen",
+        "price_vs_kumo": "Price vs Kumo Cloud"
+      }
+    }
   },
   "timeframes": {
     "1m": "1 minute",
@@ -302,5 +321,7 @@
   "dashboard.errors.unknownChartError": "Unknown error loading chart data.",
   "dashboard.errors.fetchSignalError": "Could not fetch signal analysis.",
   "common.cancel": "Cancel",
-  "common.save": "Save Changes"
+  "common.save": "Save Changes",
+  "dashboard.riskCalc.errors.requiredFieldsPositive": "Please fill all required fields (Balance, Risk %, Leverage, Entry, SL) with valid positive numbers.",
+  "profilePage.error.genericUpdate": "Error updating profile. Please try again."
 }

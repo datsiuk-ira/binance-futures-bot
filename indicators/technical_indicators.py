@@ -1,7 +1,7 @@
-# indicators/technical_indicators.py
 import pandas as pd
 import numpy as np
 import logging
+import pandas_ta as ta
 
 logger = logging.getLogger(__name__)
 
@@ -12,38 +12,40 @@ def _convert_numpy_types_for_serialization(data):
     elif isinstance(data, dict):
         return {k: _convert_numpy_types_for_serialization(v) for k, v in data.items()}
     elif isinstance(data, np.bool_):
-        return bool(data)  # Конвертуємо numpy.bool_ в Python bool
+        return bool(data)
     elif isinstance(data, np.integer):
-        return int(data)  # Конвертуємо numpy integer в Python int
+        return int(data)
     elif isinstance(data, np.floating):
         if np.isnan(data) or np.isinf(data):
-            return None  # NaN/inf з numpy float стають None
-        return float(data)  # Конвертуємо numpy float в Python float
-    elif isinstance(data, float):  # Обробка стандартних Python float NaN/inf
+            return None
+        return float(data)
+    elif isinstance(data, float):
         if np.isnan(data) or np.isinf(data):
             return None
     return data
 
 
-# --- Ваші функції calculate_sma, calculate_ema, etc. ---
-# (Залишаються такими ж, як у вашому останньому наданому файлі,
-#  або з правками з моєї попередньої відповіді для кращої обробки NaN на етапі розрахунку)
-
 def calculate_sma(prices: pd.Series, period: int) -> pd.Series:
     if prices.empty or len(prices) < 1:
-        return pd.Series([np.nan] * len(prices), index=prices.index, dtype=float)
+        return pd.Series([np.nan] * len(prices),
+                         index=prices.index if prices.index.name is not None or not prices.index.empty else pd.RangeIndex(
+                             len(prices)), dtype=float)
     return prices.rolling(window=period, min_periods=1).mean()
 
 
 def calculate_ema(prices: pd.Series, period: int) -> pd.Series:
     if prices.empty:
-        return pd.Series([np.nan] * len(prices), index=prices.index, dtype=float)
+        return pd.Series([np.nan] * len(prices),
+                         index=prices.index if prices.index.name is not None or not prices.index.empty else pd.RangeIndex(
+                             len(prices)), dtype=float)
     return prices.ewm(span=period, adjust=False, min_periods=1).mean()
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     if prices.empty or len(prices) < 2:
-        return pd.Series([np.nan] * len(prices), index=prices.index, dtype=float)
+        return pd.Series([np.nan] * len(prices),
+                         index=prices.index if prices.index.name is not None or not prices.index.empty else pd.RangeIndex(
+                             len(prices)), dtype=float)
     delta = prices.diff()
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
@@ -54,77 +56,273 @@ def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     rsi = 100.0 - (100.0 / (1.0 + rs))
     rsi.loc[(avg_gain > 0) & (avg_loss == 0)] = 100.0
     rsi.loc[(avg_gain == 0) & (avg_loss > 0)] = 0.0
-    rsi.loc[(avg_gain == 0) & (avg_loss == 0)] = 50.0
+    rsi.loc[(avg_gain == 0) & (avg_loss == 0)] = 50.0  # Or np.nan, 50 is a common convention
     return rsi
 
 
 def calculate_macd(prices: pd.Series, fast_period: int = 12, slow_period: int = 26,
                    signal_period: int = 9) -> pd.DataFrame:
+    empty_df_index = prices.index if prices.index.name is not None or not prices.index.empty else pd.RangeIndex(
+        len(prices))
     if prices.empty:
-        return pd.DataFrame(columns=['MACD', 'Signal', 'Histogram'], index=prices.index, dtype=float)
+        return pd.DataFrame(columns=['MACD', 'Signal', 'Histogram'], index=empty_df_index, dtype=float)
+
     ema_fast = calculate_ema(prices, fast_period)
     ema_slow = calculate_ema(prices, slow_period)
     macd_line = ema_fast - ema_slow
+
+    # Drop NaNs before calculating signal line to prevent all NaNs if macd_line starts with NaNs
     signal_line_calculated = calculate_ema(macd_line.dropna(), signal_period)
-    df = pd.DataFrame(index=prices.index)
+
+    df = pd.DataFrame(index=prices.index)  # Ensure index matches original prices
     df['MACD'] = macd_line
-    df['Signal'] = signal_line_calculated
-    df['Signal'] = df['Signal'].reindex(df.index)
+    df['Signal'] = signal_line_calculated  # This will align based on index, NaNs where appropriate
+    df['Signal'] = df['Signal'].reindex(df.index)  # Explicitly reindex to match prices.index fully
     df['Histogram'] = df['MACD'] - df['Signal']
     return df
 
 
 def calculate_bollinger_bands(prices: pd.Series, period: int = 20, num_std_dev: float = 2.0) -> pd.DataFrame:
+    empty_df_index = prices.index if prices.index.name is not None or not prices.index.empty else pd.RangeIndex(
+        len(prices))
     if prices.empty:
-        return pd.DataFrame(columns=['Middle', 'Upper', 'Lower'], index=prices.index, dtype=float)
+        return pd.DataFrame(columns=['Middle', 'Upper', 'Lower'], index=empty_df_index, dtype=float)
     middle_band = calculate_sma(prices, period)
     rolling_std = prices.rolling(window=period, min_periods=1).std()
     upper_band = middle_band + (rolling_std * num_std_dev)
     lower_band = middle_band - (rolling_std * num_std_dev)
-    return pd.DataFrame({'Middle': middle_band, 'Upper': upper_band, 'Lower': lower_band})
+    return pd.DataFrame({'Middle': middle_band, 'Upper': upper_band, 'Lower': lower_band}, index=prices.index)
 
 
-def calculate_atr(high_prices: pd.Series, low_prices: pd.Series, close_prices: pd.Series,
-                  period: int = 14) -> pd.Series:
-    if high_prices.empty or low_prices.empty or close_prices.empty or len(close_prices) < 2:
-        return pd.Series([np.nan] * len(close_prices), index=close_prices.index, dtype=float)
-    prev_close = close_prices.shift(1)
-    tr1 = high_prices - low_prices
-    tr2 = np.abs(high_prices - prev_close)
-    tr3 = np.abs(low_prices - prev_close)
-    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1, skipna=False)
-    atr = true_range.ewm(com=period - 1, adjust=False, min_periods=period).mean()
-    return atr
+def calculate_stochastic_oscillator(data_df, k_period=14, d_period=3):
+    if not all(col in data_df.columns for col in ['high', 'low', 'close']):
+        logger.warning("Stochastic Oscillator: Missing high, low, or close columns.")
+        return {'k_line': np.full(len(data_df), np.nan), 'd_line': np.full(len(data_df), np.nan)}
+
+    if len(data_df) < max(k_period, d_period):
+        logger.warning(f"Stochastic Oscillator: Insufficient data for period {k_period}/{d_period}. Have {len(data_df)} points.")
+        return {'k_line': np.full(len(data_df), np.nan), 'd_line': np.full(len(data_df), np.nan)}
+
+    try:
+        stoch = ta.stoch(high=data_df['high'], low=data_df['low'], close=data_df['close'], k=k_period, d=d_period)
+        k_line = stoch[f'STOCHk_{k_period}_{d_period}_{d_period}']
+        d_line = stoch[f'STOCHd_{k_period}_{d_period}_{d_period}']
+    except Exception as e:
+        logger.error(f"Error in pandas_ta.stoch: {e}")
+        k_line = pd.Series(np.nan, index=data_df.index)
+        d_line = pd.Series(np.nan, index=data_df.index)
+
+    return {
+        'k_line': k_line.values,
+        'd_line': d_line.values
+    }
 
 
-def calculate_adx(high_prices: pd.Series, low_prices: pd.Series, close_prices: pd.Series,
-                  period: int = 14) -> pd.DataFrame:
-    if high_prices.empty or low_prices.empty or close_prices.empty or len(close_prices) < period + 1:
-        nan_series = pd.Series([np.nan] * len(close_prices), index=close_prices.index, dtype=float)
-        return pd.DataFrame({'ADX': nan_series, 'PDI': nan_series, 'MDI': nan_series})
-    up_move = high_prices.diff()
-    down_move = -low_prices.diff()
-    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=high_prices.index)
-    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=high_prices.index)
-    smooth_plus_dm = plus_dm.ewm(com=period - 1, adjust=False, min_periods=period).mean()
-    smooth_minus_dm = minus_dm.ewm(com=period - 1, adjust=False, min_periods=period).mean()
-    atr_val = calculate_atr(high_prices, low_prices, close_prices, period)
-    atr_safe = atr_val.replace(0, np.nan)
-    pdi = (smooth_plus_dm / atr_safe) * 100
-    mdi = (smooth_minus_dm / atr_safe) * 100
-    dx_denominator = (pdi + mdi).replace(0, np.nan).replace([np.inf, -np.inf], np.nan)
-    dx = (np.abs(pdi - mdi) / dx_denominator) * 100
-    adx = dx.ewm(com=period - 1, adjust=False, min_periods=period).mean()
-    df_result = pd.DataFrame(index=close_prices.index)
-    df_result['ADX'] = adx
-    df_result['PDI'] = pdi
-    df_result['MDI'] = mdi
-    df_result.replace([np.inf, -np.inf], np.nan, inplace=True)
-    return df_result
+def calculate_atr(data_df, period=14):
+    if not all(col in data_df.columns for col in ['high', 'low', 'close']):
+        logger.warning("ATR: Missing high, low, or close columns.")
+        return np.full(len(data_df), np.nan)
+
+    if len(data_df) < period:
+        logger.warning(f"ATR: Insufficient data for period {period}. Have {len(data_df)} points.")
+        return np.full(len(data_df), np.nan)
+
+    try:
+        atr_series = ta.atr(high=data_df['high'], low=data_df['low'], close=data_df['close'], length=period)
+    except Exception as e:
+        logger.error(f"Error in pandas_ta.atr: {e}")
+        atr_series = pd.Series(np.nan, index=data_df.index)
+
+    return atr_series.values
+
+
+def calculate_adx(data_df, period=14):
+    if not all(col in data_df.columns for col in ['high', 'low', 'close']):
+        logger.warning("ADX: Missing high, low, or close columns.")
+        return np.full(len(data_df), np.nan)
+
+    if len(data_df) < period * 2:
+        logger.warning(f"ADX: Insufficient data for period {period}. Have {len(data_df)} points.")
+        return np.full(len(data_df), np.nan)
+
+    try:
+        adx_series = ta.adx(high=data_df['high'], low=data_df['low'], close=data_df['close'], length=period)
+        adx_values = adx_series[f'ADX_{period}']
+    except Exception as e:
+        logger.error(f"Error in pandas_ta.adx: {e}")
+        adx_values = pd.Series(np.nan, index=data_df.index)
+
+    return adx_values.values
+
+
+def calculate_obv(data_df):
+    if not all(col in data_df.columns for col in ['close', 'volume']):
+        logger.warning("OBV: Missing close or volume columns.")
+        return np.full(len(data_df), np.nan)
+
+    if len(data_df) == 0:
+        return np.array([])
+
+    try:
+        obv_series = ta.obv(close=data_df['close'], volume=data_df['volume'])
+    except Exception as e:
+        logger.error(f"Error in pandas_ta.obv: {e}")
+        obv_series = pd.Series(np.nan, index=data_df.index)
+
+    return obv_series.values
+
+
+def calculate_vwap(data_df):
+    if not all(col in data_df.columns for col in ['high', 'low', 'close', 'volume']):
+        logger.warning("VWAP: Missing high, low, close, or volume columns.")
+        return np.full(len(data_df), np.nan)
+
+    if len(data_df) == 0:
+        return np.array([])
+
+    try:
+        vwap_series = ta.vwap(high=data_df['high'], low=data_df['low'], close=data_df['close'], volume=data_df['volume'])
+    except Exception as e:
+        logger.error(f"Error in pandas_ta.vwap: {e}")
+        vwap_series = pd.Series(np.nan, index=data_df.index)
+
+    return vwap_series.values
+
+
+def calculate_ichimoku_cloud(data_df, tenkan_period=9, kijun_period=26, senkou_b_period=52, chikou_period=26,
+                             senkou_span_displacement=26):
+    if not isinstance(data_df, pd.DataFrame):
+        data_df = pd.DataFrame(data_df)
+
+    df_copy = data_df.copy()
+    df_copy.columns = [str(col).lower() for col in df_copy.columns]
+
+    if not all(col in df_copy.columns for col in ['high', 'low', 'close']):
+        logger.warning("Ichimoku: Missing high, low, or close columns.")
+        nan_array = np.full(len(data_df), np.nan)
+        return {
+            'tenkan_sen': nan_array, 'kijun_sen': nan_array,
+            'senkou_span_a': nan_array, 'senkou_span_b': nan_array,
+            'chikou_span': nan_array,
+        }
+
+    try:
+        ichimoku_df, _ = ta.ichimoku(
+            high=df_copy['high'],
+            low=df_copy['low'],
+            close=df_copy['close'],
+            tenkan=tenkan_period,
+            kijun=kijun_period,
+            senkou=senkou_b_period,
+            chikou=chikou_period,
+            offset=senkou_span_displacement
+        )
+    except Exception as e:
+        logger.error(f"Error calculating Ichimoku with pandas_ta: {e}")
+        nan_array = np.full(len(data_df), np.nan)
+        return {
+            'tenkan_sen': nan_array, 'kijun_sen': nan_array,
+            'senkou_span_a': nan_array, 'senkou_span_b': nan_array,
+            'chikou_span': nan_array,
+        }
+
+    if ichimoku_df is None or ichimoku_df.empty:
+        nan_array = np.full(len(data_df), np.nan)
+        return {
+            'tenkan_sen': nan_array, 'kijun_sen': nan_array,
+            'senkou_span_a': nan_array, 'senkou_span_b': nan_array,
+            'chikou_span': nan_array,
+        }
+
+    tenkan_col_name = f'ITS_{tenkan_period}'
+    kijun_col_name = f'IKS_{kijun_period}'
+    senkou_a_col_name = f'ISA_{tenkan_period}'
+    senkou_a_col_actual = f'ISA_{tenkan_period}'
+    if f'ISA_{senkou_span_displacement}' in ichimoku_df.columns:
+        senkou_a_col_actual = f'ISA_{senkou_span_displacement}'
+    elif 'ISA' in ichimoku_df.columns:
+        senkou_a_col_actual = 'ISA'
+
+    senkou_b_col_actual = f'ISB_{senkou_b_period}'
+    if f'ISB_{senkou_span_displacement}' in ichimoku_df.columns:
+        senkou_b_col_actual = f'ISB_{senkou_span_displacement}'
+    elif 'ISB' in ichimoku_df.columns:
+        senkou_b_col_actual = 'ISB'
+
+    chikou_col_actual = f'ICS_{chikou_period}'
+    if 'ICS' in ichimoku_df.columns:
+        chikou_col_actual = 'ICS'
+
+    def get_col_values(df, potential_names, default_len):
+        for name in potential_names:
+            if name in df.columns:
+                return df[name].values
+        return np.full(default_len, np.nan)
+
+    return {
+        'tenkan_sen': get_col_values(ichimoku_df, [tenkan_col_name, f'TENKAN_{tenkan_period}'], len(data_df)),
+        'kijun_sen': get_col_values(ichimoku_df, [kijun_col_name, f'KIJUN_{kijun_period}'], len(data_df)),
+        'senkou_span_a': get_col_values(ichimoku_df,
+                                        [senkou_a_col_actual, f'ISA_{tenkan_period}', f'ISA_{senkou_span_displacement}', 'ISA',
+                                         'senkou_a'], len(data_df)),
+        'senkou_span_b': get_col_values(ichimoku_df,
+                                        [senkou_b_col_actual, f'ISB_{senkou_b_period}', f'ISB_{senkou_span_displacement}', 'ISB',
+                                         'senkou_b'], len(data_df)),
+        'chikou_span': get_col_values(ichimoku_df, [chikou_col_actual, f'ICS_{chikou_period}', 'ICS', 'chikou'],
+                                      len(data_df)),
+    }
+
+
+def calculate_fibonacci_retracement(data_df, period=20, levels=None):
+    if levels is None:
+        levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]
+
+    if not isinstance(data_df, pd.DataFrame):
+        data_df = pd.DataFrame(data_df)
+
+    df_copy = data_df.copy()
+    df_copy.columns = [str(col).lower() for col in df_copy.columns]
+
+    if not all(col in df_copy.columns for col in ['high', 'low']):
+        logger.warning("Fibonacci: Missing high or low columns.")
+        nan_results = {}
+        for level in levels:
+            nan_results[f'level_{int(level * 1000)}'] = np.full(len(data_df), np.nan)
+            nan_results[f'downtrend_level_{int(level * 1000)}'] = np.full(len(data_df), np.nan)
+        return nan_results
+
+    results = {}
+    for level in levels:
+        results[f'level_{int(level * 1000)}'] = np.full(len(data_df), np.nan)
+        results[f'downtrend_level_{int(level * 1000)}'] = np.full(len(data_df), np.nan)
+
+    if len(df_copy) < 2:
+        return results
+
+    recent_data = df_copy.tail(period)
+    if len(recent_data) < 2:
+        return results
+
+    highest_high_price = recent_data['high'].max()
+    lowest_low_price = recent_data['low'].min()
+
+    if pd.isna(highest_high_price) or pd.isna(lowest_low_price):
+        return results
+
+    diff_uptrend = highest_high_price - lowest_low_price
+    if diff_uptrend > 0:
+        for level in levels:
+            results[f'level_{int(level * 1000)}'][-1] = highest_high_price - (diff_uptrend * level)
+
+    diff_downtrend = highest_high_price - lowest_low_price
+    if diff_downtrend > 0:
+        for level in levels:
+            results[f'downtrend_level_{int(level * 1000)}'][-1] = lowest_low_price + (diff_downtrend * level)
+
+    return results
 
 
 def get_all_indicators(ohlcv_df_or_list, indicator_settings: dict = None) -> dict:
-    # ... (початок функції, як у вашому файлі, з перевірками та створенням df) ...
     if isinstance(ohlcv_df_or_list, list):
         if not ohlcv_df_or_list:
             return _convert_numpy_types_for_serialization({"timestamps": [], "error": "Input data list is empty"})
@@ -168,24 +366,32 @@ def get_all_indicators(ohlcv_df_or_list, indicator_settings: dict = None) -> dic
             "error": f"Data processing error: {str(e)}"
         })
 
-    close_prices = df['close'].dropna()
-    high_prices = df['high'].dropna()
-    low_prices = df['low'].dropna()
+    close_prices_series = df['close']
 
-    if close_prices.empty:  # Якщо після dropna нічого не залишилось
+    if close_prices_series.dropna().empty:
         logger.warning("Close prices are all NaN after processing, cannot calculate indicators.")
-        # Повертаємо timestamps, але індикатори будуть порожні або None після _convert_numpy_types_for_serialization
         empty_indicators_payload = {"timestamps": df['timestamp'].tolist()}
-        # Додаємо порожні структури для всіх очікуваних індикаторів, щоб фронтенд не падав
         empty_indicators_payload['rsi'] = {}
         empty_indicators_payload['ema'] = {}
         empty_indicators_payload['sma'] = {}
         empty_indicators_payload['macd'] = []
         empty_indicators_payload['bollinger_bands'] = []
-        empty_indicators_payload['adx'] = {}
+        empty_indicators_payload['adx_line'] = [None] * len(df)
+        empty_indicators_payload['atr_line'] = [None] * len(df)
+        empty_indicators_payload['ichimoku_cloud'] = {
+            'tenkan_sen': [None] * len(df), 'kijun_sen': [None] * len(df),
+            'senkou_span_a': [None] * len(df), 'senkou_span_b': [None] * len(df),
+            'chikou_span': [None] * len(df)
+        }
+        default_fib_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]
+        empty_fib_levels_uptrend = {f'level_{int(level * 1000)}': [None] * len(df) for level in default_fib_levels}
+        empty_fib_levels_downtrend = {f'downtrend_level_{int(level * 1000)}': [None] * len(df) for level in
+                                      default_fib_levels}
+        empty_indicators_payload['fibonacci_retracement'] = {**empty_fib_levels_uptrend, **empty_fib_levels_downtrend}
+        empty_indicators_payload['vwap_line'] = [None] * len(df)
         empty_indicators_payload['trend_status'] = {'current_trend': 'UNDETERMINED', 'sma50_gt_sma200': None,
-                                                    'details': []}
-        empty_indicators_payload['volatility'] = {'atr_percentage': [], 'current_atr_percentage': None}
+                                                    'details': [None] * len(df)}
+        empty_indicators_payload['volatility'] = {'atr_percentage': [None] * len(df), 'current_atr_percentage': None}
         return _convert_numpy_types_for_serialization(empty_indicators_payload)
 
     results = {'timestamps': df['timestamp'].tolist()}
@@ -194,30 +400,37 @@ def get_all_indicators(ohlcv_df_or_list, indicator_settings: dict = None) -> dic
             "rsi_periods": [14], "ema_periods": [9, 21, 50, 200], "sma_periods": [10, 20, 50, 200],
             "macd_params": [{"fast": 12, "slow": 26, "signal": 9}],
             "bollinger_params": [{"period": 20, "num_std_dev": 2.0}],
-            "adx_period": 14, "atr_period_for_volatility": 14
+            "adx_period": 14,
+            "atr_period": 14,
+            "ichimoku_params": {"tenkan": 9, "kijun": 26, "senkou_b": 52, "chikou": 26, "displacement": 26},
+            "fibonacci_params": {"period": 20, "levels": [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]},
+            "vwap_enabled": True,
+            "atr_period_for_volatility": 14
         }
 
-    # RSI, EMA, SMA (як у вашому файлі, з .reindex(df.index).tolist())
+    calc_close_prices = df['close'].dropna()
+    if calc_close_prices.empty:
+        calc_close_prices = df['close']
+
     results['rsi'] = {}
     for period in indicator_settings.get("rsi_periods", []):
-        rsi_series = calculate_rsi(close_prices, period).reindex(df.index)
+        rsi_series = calculate_rsi(calc_close_prices, period).reindex(df.index)
         results['rsi'][f'rsi_{period}'] = rsi_series.tolist()
 
     results['ema'] = {}
     for period in indicator_settings.get("ema_periods", []):
-        ema_series = calculate_ema(close_prices, period).reindex(df.index)
+        ema_series = calculate_ema(calc_close_prices, period).reindex(df.index)
         results['ema'][f'ema_{period}'] = ema_series.tolist()
 
     results['sma'] = {}
     for period in indicator_settings.get("sma_periods", []):
-        sma_series = calculate_sma(close_prices, period).reindex(df.index)
+        sma_series = calculate_sma(calc_close_prices, period).reindex(df.index)
         results['sma'][f'sma_{period}'] = sma_series.tolist()
 
-    # MACD
     results['macd'] = []
     for params in indicator_settings.get("macd_params", []):
-        macd_df_calc = calculate_macd(close_prices, params["fast"], params["slow"], params["signal"])
-        macd_df_reindexed = macd_df_calc.reindex(df.index)  # Reindex перед tolist
+        macd_df_calc = calculate_macd(calc_close_prices, params["fast"], params["slow"], params["signal"])
+        macd_df_reindexed = macd_df_calc.reindex(df.index)
         results['macd'].append({
             'params': f'{params["fast"]}_{params["slow"]}_{params["signal"]}',
             'macd_line': macd_df_reindexed['MACD'].tolist(),
@@ -225,12 +438,11 @@ def get_all_indicators(ohlcv_df_or_list, indicator_settings: dict = None) -> dic
             'histogram': macd_df_reindexed['Histogram'].tolist()
         })
 
-    # Bollinger Bands
     results['bollinger_bands'] = []
     for params in indicator_settings.get("bollinger_params", []):
         num_std = params.get("num_std_dev", params.get("std_dev", 2.0))
-        bb_df_calc = calculate_bollinger_bands(close_prices, params["period"], num_std)
-        bb_df_reindexed = bb_df_calc.reindex(df.index)  # Reindex
+        bb_df_calc = calculate_bollinger_bands(calc_close_prices, params["period"], num_std)
+        bb_df_reindexed = bb_df_calc.reindex(df.index)
         results['bollinger_bands'].append({
             'params': f'{params["period"]}_{num_std}',
             'middle_band': bb_df_reindexed['Middle'].tolist(),
@@ -238,39 +450,63 @@ def get_all_indicators(ohlcv_df_or_list, indicator_settings: dict = None) -> dic
             'lower_band': bb_df_reindexed['Lower'].tolist()
         })
 
-    # ADX
-    adx_period_setting = indicator_settings.get("adx_period")
-    # Створюємо порожню структуру ADX за замовчуванням
-    adx_key = f'adx_{adx_period_setting}' if adx_period_setting else 'adx_default'
-    pdi_key = f'pdi_{adx_period_setting}' if adx_period_setting else 'pdi_default'
-    mdi_key = f'mdi_{adx_period_setting}' if adx_period_setting else 'mdi_default'
-    results['adx'] = {
-        adx_key: [None] * len(df),
-        pdi_key: [None] * len(df),
-        mdi_key: [None] * len(df)
-    }
-    if adx_period_setting and not high_prices.empty and not low_prices.empty and not close_prices.empty:
-        common_index = high_prices.index.intersection(low_prices.index).intersection(close_prices.index)
-        if not common_index.empty:
-            adx_df_calc = calculate_adx(high_prices.loc[common_index], low_prices.loc[common_index],
-                                        close_prices.loc[common_index], adx_period_setting)
-            adx_df_reindexed = adx_df_calc.reindex(df.index)  # Reindex
-            results['adx'] = {
-                f'adx_{adx_period_setting}': adx_df_reindexed['ADX'].tolist(),
-                f'pdi_{adx_period_setting}': adx_df_reindexed['PDI'].tolist(),
-                f'mdi_{adx_period_setting}': adx_df_reindexed['MDI'].tolist()
-            }
-        else:
-            logger.warning("Cannot calculate ADX due to empty common index for OHLC data.")
-            # results['adx'] вже ініціалізовано списками None
+    adx_period_setting = indicator_settings.get("adx_period", 14)
+    adx_values_arr = calculate_adx(df, adx_period_setting)
+    results['adx_line'] = pd.Series(adx_values_arr, index=df.index).tolist()
 
-    # Trend Status
-    sma50 = calculate_sma(close_prices, 50).reindex(df.index)
-    sma200 = calculate_sma(close_prices, 200).reindex(df.index)
-    # ... (решта логіки trend_status, забезпечуючи .tolist() в кінці)
+    atr_period_setting = indicator_settings.get("atr_period", 14)
+    atr_values_arr = calculate_atr(df, atr_period_setting)
+    results['atr_line'] = pd.Series(atr_values_arr, index=df.index).tolist()
+
+    ichimoku_setting = indicator_settings.get("ichimoku_params")
+    if ichimoku_setting:
+        ichimoku_data = calculate_ichimoku_cloud(
+            df,
+            tenkan_period=ichimoku_setting.get("tenkan", 9),
+            kijun_period=ichimoku_setting.get("kijun", 26),
+            senkou_b_period=ichimoku_setting.get("senkou_b", 52),
+            chikou_period=ichimoku_setting.get("chikou", 26),
+            senkou_span_displacement=ichimoku_setting.get("displacement", 26)
+        )
+        results['ichimoku_cloud'] = {
+            k: pd.Series(v, index=df.index).tolist() for k, v in ichimoku_data.items()
+        }
+    else:
+        results['ichimoku_cloud'] = {
+            'tenkan_sen': [None] * len(df), 'kijun_sen': [None] * len(df),
+            'senkou_span_a': [None] * len(df), 'senkou_span_b': [None] * len(df),
+            'chikou_span': [None] * len(df)
+        }
+
+    fibonacci_setting = indicator_settings.get("fibonacci_params")
+    if fibonacci_setting:
+        fib_data = calculate_fibonacci_retracement(
+            df,
+            period=fibonacci_setting.get("period", 20),
+            levels=fibonacci_setting.get("levels")
+        )
+        results['fibonacci_retracement'] = {
+            k: pd.Series(v, index=df.index).tolist() for k, v in fib_data.items()
+        }
+    else:
+        default_fib_levels = indicator_settings.get("fibonacci_params", {}).get("levels",
+                                                                                [0.0, 0.236, 0.382, 0.5, 0.618, 0.786,
+                                                                                 1.0])
+        empty_fib_data_up = {f'level_{int(level * 1000)}': [None] * len(df) for level in default_fib_levels}
+        empty_fib_data_down = {f'downtrend_level_{int(level * 1000)}': [None] * len(df) for level in default_fib_levels}
+        results['fibonacci_retracement'] = {**empty_fib_data_up, **empty_fib_data_down}
+
+    if indicator_settings.get("vwap_enabled", True):
+        vwap_values_arr = calculate_vwap(df)
+        results['vwap_line'] = pd.Series(vwap_values_arr, index=df.index).tolist()
+    else:
+        results['vwap_line'] = [None] * len(df)
+
+    sma50 = calculate_sma(calc_close_prices, 50).reindex(df.index)
+    sma200 = calculate_sma(calc_close_prices, 200).reindex(df.index)
     trend_details_list = [None] * len(df)
     latest_trend_val = "UNDETERMINED"
-    sma50_gt_sma200_val = None  # Має бути Python bool або None
+    sma50_gt_sma200_val = None
     if not sma50.empty and not sma200.empty:
         trend_series = pd.Series("FLAT", index=df.index)
         valid_comparison = sma50.notna() & sma200.notna()
@@ -278,107 +514,221 @@ def get_all_indicators(ohlcv_df_or_list, indicator_settings: dict = None) -> dic
         trend_series[valid_comparison & (sma50 < sma200)] = "DOWNTREND"
         trend_details_list = trend_series.tolist()
         if valid_comparison.any():
-            last_valid_idx = df.index[valid_comparison].max()
-            if last_valid_idx is not pd.NaT:
-                latest_trend_val = trend_series[last_valid_idx]
-                # Конвертуємо numpy.bool_ в Python bool
-                sma50_val_at_idx = sma50[last_valid_idx]
-                sma200_val_at_idx = sma200[last_valid_idx]
+            last_valid_series_index = trend_series[valid_comparison].last_valid_index()
+            if last_valid_series_index is not None:
+                latest_trend_val = trend_series[last_valid_series_index]
+                sma50_val_at_idx = sma50[last_valid_series_index]
+                sma200_val_at_idx = sma200[last_valid_series_index]
                 if pd.notna(sma50_val_at_idx) and pd.notna(sma200_val_at_idx):
                     sma50_gt_sma200_val = bool(sma50_val_at_idx > sma200_val_at_idx)
 
     results['trend_status'] = {
         'current_trend': latest_trend_val,
-        'sma50_gt_sma200': sma50_gt_sma200_val,  # Тепер це Python bool або None
+        'sma50_gt_sma200': sma50_gt_sma200_val,
         'details': trend_details_list
     }
 
-    # Volatility
     atr_period_vol = indicator_settings.get("atr_period_for_volatility")
     current_atr_perc = None
     volatility_percentage_list = [None] * len(df)
-    if atr_period_vol and not high_prices.empty and not low_prices.empty and not close_prices.empty:
-        common_index_atr = high_prices.index.intersection(low_prices.index).intersection(close_prices.index)
-        if not common_index_atr.empty:
-            atr_val = calculate_atr(high_prices.loc[common_index_atr], low_prices.loc[common_index_atr],
-                                    close_prices.loc[common_index_atr], atr_period_vol).reindex(df.index)
-            close_prices_safe = close_prices.reindex(df.index).replace(0, np.nan)
-            volatility_percentage = (atr_val / close_prices_safe) * 100
-            volatility_percentage_list = volatility_percentage.tolist()  # Це вже список float з можливими nan
-            if not volatility_percentage.empty:
-                last_val_atr_perc = volatility_percentage.iloc[-1]  # Може бути nan
-                if pd.notna(last_val_atr_perc):  # Перевіряємо, чи не nan
-                    current_atr_perc = float(last_val_atr_perc)  # Конвертуємо в Python float
+
+    if atr_period_vol:
+        if all(col in df.columns for col in ['high', 'low', 'close']):
+            atr_values_for_vol_arr = calculate_atr(df, atr_period_vol)
+            atr_val_series = pd.Series(atr_values_for_vol_arr, index=df.index)
+            df_close_for_vol_calc = df['close'].replace(0, np.nan)
+            if not atr_val_series.empty and not df_close_for_vol_calc.empty and not df_close_for_vol_calc.isnull().all():
+                volatility_percentage = (atr_val_series / df_close_for_vol_calc) * 100
+                volatility_percentage_list = volatility_percentage.tolist()
+                last_valid_atr_perc = volatility_percentage.ffill().iloc[
+                    -1] if not volatility_percentage.empty and volatility_percentage.notna().any() else None
+                if pd.notna(last_valid_atr_perc):
+                    current_atr_perc = float(last_valid_atr_perc)
+            else:
+                logger.warning("ATR or Close series for volatility calculation was empty or all NaN.")
+        else:
+            logger.warning("Missing high, low, or close columns in df for ATR volatility calculation.")
 
     results['volatility'] = {
         'atr_percentage': volatility_percentage_list,
-        'current_atr_percentage': current_atr_perc  # Python float або None
+        'current_atr_percentage': current_atr_perc
     }
 
-    # Логування перед фінальним очищенням (як ви просили)
-    # ... (додайте ваше логування тут, якщо потрібно, для results) ...
-
-    final_results = _convert_numpy_types_for_serialization(results)  # Використовуємо нову функцію
-
-    # Логування після фінального очищення
-    if final_results.get('adx'):
-        logger.debug(f"ADX data AFTER cleaning: {final_results['adx']}")
-    if final_results.get('macd') and final_results['macd']:
-        logger.debug(f"MACD set 0 signal_line AFTER cleaning: {final_results['macd'][0].get('signal_line')}")
-
+    final_results = _convert_numpy_types_for_serialization(results)
     return final_results
 
 
-# generate_trading_signals залишається як є, але тепер вона отримуватиме дані, де numpy типи вже конвертовані
 def generate_trading_signals(indicator_data: dict, prices_df: pd.DataFrame) -> pd.Series:
-    # ... (код generate_trading_signals як у вашому файлі) ...
-    # Переконайтеся, що він коректно обробляє None замість NaN
     num_points = len(indicator_data.get('timestamps', []))
     if num_points == 0:
-        return pd.Series(dtype=str)
+        return pd.Series([{'type': 'HOLD', 'reliability': 0.0, 'reason': 'No data'}] * 0, dtype=object)
 
     try:
         datetime_index = pd.to_datetime(indicator_data['timestamps'], unit='ms')
     except Exception as e:
         logger.error(f"Error converting timestamps for signals: {e}")
-        return pd.Series(['HOLD'] * num_points)
+        # Create a default index if datetime_index conversion fails but num_points is > 0
+        fallback_index = pd.RangeIndex(start=0, stop=num_points, step=1)
+        return pd.Series([{'type': 'HOLD', 'reliability': 0.0, 'reason': 'Timestamp error'}] * num_points,
+                         index=fallback_index, dtype=object)
 
-    signals = pd.Series(['HOLD'] * num_points, index=datetime_index)
+    signals_output = [{'type': 'HOLD', 'reliability': 0.1, 'reason': 'Neutral'} for _ in
+                      range(num_points)]
+    def get_series_from_data(main_key, sub_key=None, data_dict=None, length=num_points, idx=datetime_index):
+        source = data_dict if data_dict is not None else indicator_data
 
-    try:
-        rsi_data = indicator_data.get('rsi', {})
-        rsi_key_options = [f'rsi_{p}' for p in [14, 7, 5]]
-        rsi_key_to_use = next((k for k in rsi_key_options if k in rsi_data and rsi_data[k]), None)
-
-        if not rsi_key_to_use or not rsi_data.get(rsi_key_to_use):
-            logger.warning("No suitable RSI data found or RSI data is empty for signal generation.")
-            return signals.fillna('HOLD')
-
-        rsi_values_list = rsi_data.get(rsi_key_to_use, [])
-        rsi_values = pd.Series([x if x is not None else np.nan for x in rsi_values_list], index=datetime_index)
-
-        macd_sets = indicator_data.get('macd', [])
-        if macd_sets and macd_sets[0].get('macd_line'):
-            macd_data = macd_sets[0]
-            macd_line_list = macd_data.get('macd_line', [])
-            signal_line_list = macd_data.get('signal_line', [])
-
-            macd_line = pd.Series([x if x is not None else np.nan for x in macd_line_list], index=datetime_index)
-            signal_line = pd.Series([x if x is not None else np.nan for x in signal_line_list], index=datetime_index)
-
-            if not (rsi_values.isna().all() or macd_line.isna().all() or signal_line.isna().all()):
-                macd_prev = macd_line.shift(1)
-                signal_prev = signal_line.shift(1)
-
-                buy_condition = (rsi_values < 30) & (macd_line > signal_line) & (macd_prev < signal_prev)
-                signals[buy_condition] = 'BUY'
-
-                sell_condition = (rsi_values > 70) & (macd_line < signal_line) & (macd_prev > signal_prev)
-                signals[sell_condition] = 'SELL'
+        if sub_key:
+            data_list = source.get(main_key, {}).get(sub_key, [])
         else:
-            logger.info("MACD data not found or is empty for signal generation.")
+            data_list = source.get(main_key, [])
 
-    except Exception as e:
-        logger.error(f"Error generating trading signals: {e}", exc_info=True)
+        if not isinstance(data_list, list): data_list = []
 
-    return signals.fillna('HOLD')
+        if len(data_list) != length:
+            logger.warning(f"Length mismatch for {main_key + ('.' + sub_key if sub_key else '')}. Expected {length}, got {len(data_list)}. Padding/truncating.")
+            padded_list = [np.nan] * length
+            for i in range(min(len(data_list), length)):
+                padded_list[i] = data_list[i]
+            data_list = padded_list
+
+        return pd.Series([x if x is not None else np.nan for x in data_list], index=idx)
+
+    # RSI
+    rsi_data_dict = indicator_data.get('rsi', {})
+    rsi_key_to_use = next((k for p in [14, 7, 21] for k in [f'rsi_{p}'] if k in rsi_data_dict and rsi_data_dict[k]),
+                          None)
+    if not rsi_key_to_use and rsi_data_dict: rsi_key_to_use = next(iter(rsi_data_dict), None)  # Fallback
+    rsi_values = get_series_from_data('rsi', rsi_key_to_use) if rsi_key_to_use else pd.Series([np.nan] * num_points,
+                                                                                              index=datetime_index)
+
+    # MACD
+    macd_sets = indicator_data.get('macd', [])
+    macd_data = macd_sets[0] if macd_sets and isinstance(macd_sets, list) and macd_sets[0] else {}
+    macd_line = get_series_from_data('macd_line', data_dict=macd_data)
+    signal_line = get_series_from_data('signal_line', data_dict=macd_data)
+
+    # Prices
+    close_prices = pd.Series([np.nan] * num_points, index=datetime_index)
+    if 'close' in prices_df.columns:
+        temp_prices_df_for_close = prices_df.copy()
+        try:
+            if not isinstance(temp_prices_df_for_close.index,
+                              pd.DatetimeIndex) or not temp_prices_df_for_close.index.equals(datetime_index):
+                if 'timestamp' in temp_prices_df_for_close.columns:
+                    temp_prices_df_for_close['datetime_idx_col'] = pd.to_datetime(temp_prices_df_for_close['timestamp'],
+                                                                                  unit='ms', errors='coerce')
+                    temp_prices_df_for_close = temp_prices_df_for_close.set_index('datetime_idx_col', drop=True)
+                else:
+                    temp_prices_df_for_close.index = datetime_index
+
+            close_prices = temp_prices_df_for_close['close'].reindex(datetime_index).ffill()
+        except Exception as e_price_idx:
+            logger.error(f"Error aligning price data index: {e_price_idx}. Close prices may be inaccurate.")
+            if len(prices_df['close']) == num_points:
+                close_prices = pd.Series(prices_df['close'].values, index=datetime_index).ffill()
+
+    # Other Indicators
+    adx_line_series = get_series_from_data('adx_line')
+    vwap_line_series = get_series_from_data('vwap_line')
+
+    ichimoku_data_dict = indicator_data.get('ichimoku_cloud', {})
+    tenkan_sen = get_series_from_data('tenkan_sen', data_dict=ichimoku_data_dict)
+    kijun_sen = get_series_from_data('kijun_sen', data_dict=ichimoku_data_dict)
+    senkou_a = get_series_from_data('senkou_span_a', data_dict=ichimoku_data_dict)
+    senkou_b = get_series_from_data('senkou_span_b', data_dict=ichimoku_data_dict)
+
+    for i in range(num_points):
+        current_reliability = 0.0
+        reasons = []
+        current_signal_type = 'HOLD'
+
+        rsi_val = rsi_values.iloc[i]
+        is_rsi_buy = pd.notna(rsi_val) and rsi_val < 30
+        is_rsi_sell = pd.notna(rsi_val) and rsi_val > 70
+        if is_rsi_buy: reasons.append(f"RSI({rsi_val:.0f})<30")
+        if is_rsi_sell: reasons.append(f"RSI({rsi_val:.0f})>70")
+
+        macd_val = macd_line.iloc[i];
+        macd_signal_val = signal_line.iloc[i]
+        macd_prev_val = macd_line.shift(1).iloc[i];
+        macd_signal_prev_val = signal_line.shift(1).iloc[i]
+        is_macd_buy_cross = pd.notna(macd_val) and pd.notna(macd_signal_val) and pd.notna(macd_prev_val) and pd.notna(
+            macd_signal_prev_val) and macd_val > macd_signal_val and macd_prev_val <= macd_signal_prev_val
+        is_macd_sell_cross = pd.notna(macd_val) and pd.notna(macd_signal_val) and pd.notna(macd_prev_val) and pd.notna(
+            macd_signal_prev_val) and macd_val < macd_signal_val and macd_prev_val >= macd_signal_prev_val
+        if is_macd_buy_cross: reasons.append("MACD_BuyX")
+        if is_macd_sell_cross: reasons.append("MACD_SellX")
+
+        if is_rsi_buy and is_macd_buy_cross:
+            current_signal_type = 'BUY'; current_reliability = 0.60
+        elif is_rsi_sell and is_macd_sell_cross:
+            current_signal_type = 'SELL'; current_reliability = 0.60
+        elif is_macd_buy_cross:
+            current_signal_type = 'BUY'; current_reliability = 0.45
+        elif is_macd_sell_cross:
+            current_signal_type = 'SELL'; current_reliability = 0.45
+        elif is_rsi_buy:
+            current_signal_type = 'BUY'; current_reliability = 0.35
+        elif is_rsi_sell:
+            current_signal_type = 'SELL'; current_reliability = 0.35
+        else:
+            current_signal_type = 'HOLD'; current_reliability = 0.10
+
+        adx_val = adx_line_series.iloc[i]
+        if pd.notna(adx_val):
+            reasons.append(f"ADX({adx_val:.0f})")
+            if adx_val > 25:
+                current_reliability += 0.15 * (
+                    1 if current_signal_type != 'HOLD' else 0.5)
+            elif adx_val > 20:
+                current_reliability += 0.10 * (1 if current_signal_type != 'HOLD' else 0.5)
+
+        price_val = close_prices.iloc[i]
+        vwap_val = vwap_line_series.iloc[i]
+        if pd.notna(price_val) and pd.notna(vwap_val):
+            if price_val > vwap_val: reasons.append("P>VWAP")
+            if price_val < vwap_val: reasons.append("P<VWAP")
+            if current_signal_type == 'BUY' and price_val > vwap_val: current_reliability += 0.10
+            if current_signal_type == 'SELL' and price_val < vwap_val: current_reliability += 0.10
+
+        sa_val = senkou_a.iloc[i];
+        sb_val = senkou_b.iloc[i];
+        tk_val = tenkan_sen.iloc[i];
+        kj_val = kijun_sen.iloc[i]
+        if pd.notna(price_val) and pd.notna(sa_val) and pd.notna(sb_val):
+            if price_val > max(sa_val, sb_val): reasons.append("P>Kumo")
+            if price_val < min(sa_val, sb_val): reasons.append("P<Kumo")
+            if current_signal_type == 'BUY' and price_val > max(sa_val, sb_val): current_reliability += 0.10
+            if current_signal_type == 'SELL' and price_val < min(sa_val, sb_val): current_reliability += 0.10
+
+        if pd.notna(tk_val) and pd.notna(kj_val) and pd.notna(tenkan_sen.shift(1).iloc[i]) and pd.notna(
+                kijun_sen.shift(1).iloc[i]):
+            tk_cross_kj_bullish = tk_val > kj_val and tenkan_sen.shift(1).iloc[i] <= kijun_sen.shift(1).iloc[i]
+            tk_cross_kj_bearish = tk_val < kj_val and tenkan_sen.shift(1).iloc[i] >= kijun_sen.shift(1).iloc[i]
+            if tk_cross_kj_bullish: reasons.append("TKxKJ_Buy")
+            if tk_cross_kj_bearish: reasons.append("TKxKJ_Sell")
+            if current_signal_type == 'BUY' and tk_cross_kj_bullish: current_reliability += 0.15  # Cross is a strong signal
+            if current_signal_type == 'SELL' and tk_cross_kj_bearish: current_reliability += 0.15
+
+        if i == num_points - 1 and pd.notna(price_val):
+            fib_data = indicator_data.get('fibonacci_retracement', {})
+            if fib_data:
+                for fib_name_key, fib_val_list_at_i in fib_data.items():
+                    if isinstance(fib_val_list_at_i, list) and len(fib_val_list_at_i) > i:
+                        fib_level_val_at_i = fib_val_list_at_i[i]  # Get Fib level for current point i
+                        if pd.notna(fib_level_val_at_i) and abs(price_val - fib_level_val_at_i) / price_val < 0.005:
+                            clean_fib_name = fib_name_key.replace('level_', '').replace('downtrend_', 'dt_')
+                            reasons.append(f"NearFib_{clean_fib_name}({fib_level_val_at_i:.2f})")
+
+        final_reason = ", ".join(sorted(list(set(reasons)))) if reasons else (
+            "Neutral" if current_signal_type == 'HOLD' else "Signal")
+
+        signals_output[i] = {
+            'type': current_signal_type,
+            'reliability': round(max(0.0, min(1.0, current_reliability)), 2),
+            'reason': final_reason
+        }
+
+    final_signals = pd.Series(signals_output, index=datetime_index)
+    return final_signals.apply(lambda x: x if isinstance(x, dict) else {'type': 'HOLD', 'reliability': 0.0,
+                                                                        'reason': 'Signal processing error'})

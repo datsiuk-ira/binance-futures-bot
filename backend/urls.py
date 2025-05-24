@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/users/", include("users.urls")),
     path('api/', include('api.urls')),
+    path('api/arima/', include('arima.urls')),
     # path("api/marketdata/", include("marketdata.urls")),
 ]
 

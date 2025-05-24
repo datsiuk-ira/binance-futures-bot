@@ -96,7 +96,26 @@
     "status": "Статус",
     "connecting": "Підключення...",
     "polling": "Опитування API для оновлень...",
-    "reconnectWs": "Перепідключити WebSocket"
+    "reconnectWs": "Перепідключити WebSocket",
+    "indicators": {
+      "adx": "ADX",
+      "atr": "ATR",
+      "ichimoku": "Ішимоку",
+      "fibonacci": "Фібо",
+      "vwap": "VWAP",
+      "arima": "ARIMA"
+    },
+    "signalAnalysis": {
+      "detailKeys": {
+        "macd_histogram": "Гістограма MACD",
+        "adx_value": "Значення ADX",
+        "vwap_value": "Значення VWAP",
+        "price_vs_vwap": "Ціна відносно VWAP",
+        "ichimoku_tenkan": "Tenkan-sen",
+        "ichimoku_kijun": "Kijun-sen",
+        "price_vs_kumo": "Ціна відносно Хмари"
+      }
+    }
   },
   "timeframes": {
     "1m": "1 хвилина",
@@ -302,5 +321,7 @@
   "dashboard.errors.unknownChartError": "Невідома помилка завантаження даних графіка.",
   "dashboard.errors.fetchSignalError": "Не вдалося завантажити аналіз сигналів.",
   "common.cancel": "Скасувати",
-  "common.save": "Зберегти зміни"
+  "common.save": "Зберегти зміни",
+  "dashboard.riskCalc.errors.requiredFieldsPositive": "Будь ласка, заповніть усі обов'язкові поля (Баланс, Ризик %, Плече, Вхід, SL) дійсними додатними числами.",
+  "profilePage.error.genericUpdate": "Помилка оновлення профілю. Будь ласка, спробуйте ще раз."
 }

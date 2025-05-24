@@ -7,6 +7,12 @@ export interface User {
   email: string;
   first_name?: string;
   last_name?: string;
+  balance?: string;
+  leverage?: number;
+  risk_percentage?: number;
+  binance_api_key?: string;
+  binance_secret_key?: string;
+  trade_mode?: "auto" | "semi" | "analytics";
 }
 
 export interface UpdateUserPayload {
@@ -14,6 +20,12 @@ export interface UpdateUserPayload {
     email?: string;
     first_name?: string;
     last_name?: string;
+    balance?: string;
+    leverage?: number;
+    risk_percentage?: number;
+    binance_api_key?: string;
+    binance_secret_key?: string;
+    trade_mode?: "auto" | "semi" | "analytics";
     updated_at?: string;
 }
 
@@ -36,6 +48,7 @@ export interface TokenResponse {
 export interface SignUpResponse {
   message?: string;
   user?: User;
+  detail?: string;
 }
 
 export const login = async (credentials: LoginCredentials): Promise<TokenResponse> => {
@@ -65,9 +78,9 @@ export const login = async (credentials: LoginCredentials): Promise<TokenRespons
   }
 };
 
-export const register = async (credentials: SignUpCredentials): Promise<SignUpResponse> => { // SignUpResponse або відповідний тип
+export const register = async (credentials: SignUpCredentials): Promise<SignUpResponse> => {
   try {
-    const response = await axiosInstance.post<SignUpResponse>('/users/register/', credentials);
+    const response = await axiosInstance.post<SignUpResponse>('/api/users/register/', credentials);
     return response.data;
   } catch (error: any) {
     console.error('Sign up API error:', error.response?.data || error.message);
@@ -77,7 +90,7 @@ export const register = async (credentials: SignUpCredentials): Promise<SignUpRe
 
 export const logout = async (): Promise<void> => {
   try {
-    await axiosInstance.post('/users/logout/');
+    await axiosInstance.post('/api/users/logout/');
   } catch (error: any) {
     console.error('Logout API error:', error.response?.data || error.message);
   } finally {
@@ -89,12 +102,12 @@ export const logout = async (): Promise<void> => {
 
 export const fetchUserProfileAfterLogin = async (token: string): Promise<User | null> => {
     try {
-        const response = await axiosInstance.get<{ user: User } | User>('/users/me/', { // Припускаємо ендпоінт /users/me/
+        const response = await axiosInstance.get<{ user: User } | User>('/api/users/profile/', {
             headers: {
                 Authorization: `Bearer ${token}`
             }
         });
-        if ('user' in response.data && typeof response.data.user === 'object') {
+        if ('user' in response.data && typeof response.data.user === 'object' && response.data.user !== null) {
              return response.data.user as User;
         } else if ('id' in response.data && 'username' in response.data) {
             return response.data as User;
@@ -107,18 +120,32 @@ export const fetchUserProfileAfterLogin = async (token: string): Promise<User | 
     }
 };
 
+
 export const apiUpdateUserProfile = async (userData: UpdateUserPayload, token: string): Promise<User> => {
     try {
-        // Ensure the Authorization header is set for this specific request if not globally.
-        // axiosInstance already has interceptors to add the token, but for clarity:
-        const response = await axiosInstance.patch<User>('/users/profile/', userData, { // Assuming PATCH to /api/users/profile/
+        const response = await axiosInstance.patch<User>('/api/users/profile/', userData, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
         return response.data;
     } catch (error: any) {
-        console.error("API Update User Profile error:", error.response || error.message);
-        throw error.response?.data || new Error('User profile update failed');
+        console.error("API Update User Profile error:", error.response?.data || error.message);
+        if (error.response && error.response.data) {
+            const errorData = error.response.data;
+            let errorMessage = "User profile update failed.";
+            if (typeof errorData === 'string') {
+                errorMessage = errorData;
+            } else if (errorData.detail) {
+                errorMessage = errorData.detail;
+            } else if (typeof errorData === 'object') {
+                const fieldErrors = Object.entries(errorData)
+                    .map(([key, value]) => `${key}: ${(Array.isArray(value) ? value.join(', ') : value)}`)
+                    .join('; ');
+                if (fieldErrors) errorMessage = fieldErrors;
+            }
+            throw new Error(errorMessage);
+        }
+        throw new Error('User profile update failed due to network or server issue.');
     }
 };

@@ -7,43 +7,39 @@ export interface Kline {
   low: number;
   close: number;
   volume: number;
-  signal?: 'BUY' | 'SELL' | 'HOLD'; // Added from backend
+  signal?: 'BUY' | 'SELL' | 'HOLD';
 }
 
 export interface RSIValues {
-  [key: string]: (number | null)[]; // e.g., rsi_14: [45.0, 49.8, ...]
+  [key: string]: (number | null)[];
 }
 
 export interface EMAValues {
-  [key: string]: (number | null)[]; // e.g., ema_9: [30100.0, 30150.0, ...]
+  [key: string]: (number | null)[];
 }
 
 export interface SMAValues {
-  [key: string]: (number | null)[]; // e.g., sma_10: [30000.0, 30020.0, ...]
+  [key: string]: (number | null)[];
 }
 
 export interface MACDParams {
-  params: string; // e.g., "12_26_9"
+  params: string;
   macd_line: (number | null)[];
   signal_line: (number | null)[];
   histogram: (number | null)[];
 }
 
 export interface BollingerBandsParams {
-  params: string; // e.g., "20_2.0"
+  params: string;
   middle_band: (number | null)[];
   upper_band: (number | null)[];
   lower_band: (number | null)[];
 }
 
-export interface ADXValues {
-  [key: string]: (number | null)[]; // e.g., adx_14, pdi_14, mdi_14
-}
-
 export interface TrendStatus {
   current_trend: 'UPTREND' | 'DOWNTREND' | 'FLAT' | 'UNDETERMINED';
   sma50_gt_sma200: boolean | null;
-  details: string[]; // Full series of trend status
+  details: string[];
 }
 
 export interface VolatilityStatus {
@@ -51,41 +47,74 @@ export interface VolatilityStatus {
   current_atr_percentage: number | null;
 }
 
+export interface IchimokuCloudData {
+  tenkan_sen: (number | null)[];
+  kijun_sen: (number | null)[];
+  senkou_span_a: (number | null)[];
+  senkou_span_b: (number | null)[];
+  chikou_span: (number | null)[];
+}
+
+export interface FibonacciRetracementData {
+  [levelKey: string]: (number | null)[]; // e.g., level_236, downtrend_level_382
+}
+
 export interface IndicatorData {
-  timestamps: number[]; // Timestamps corresponding to the indicator values arrays
+  timestamps: number[];
   rsi?: RSIValues;
   ema?: EMAValues;
   sma?: SMAValues;
-  macd?: MACDParams[]; // Array because backend might send multiple MACD sets (though unlikely for this app)
-  bollinger_bands?: BollingerBandsParams[]; // Array for same reason
-  adx?: ADXValues;
+  macd?: MACDParams[];
+  bollinger_bands?: BollingerBandsParams[];
+  adx_line?: (number | null)[];
+  atr_line?: (number | null)[];
+  vwap_line?: (number | null)[];
+  ichimoku_cloud?: IchimokuCloudData;
+  fibonacci_retracement?: FibonacciRetracementData;
   trend_status?: TrendStatus;
   volatility?: VolatilityStatus;
-  // Add other indicators as needed, matching backend structure
 }
 
 export interface MarketDataMessage {
-  type: 'kline_with_indicators' | 'error'; // Added error type for websockets
+  type: 'kline_with_indicators' | 'error' | 'subscription_ack' | 'connection_established' | 'pong';
   symbol: string;
   interval: string;
   klines: Kline[];
-  indicators: IndicatorData; // This is the detailed IndicatorData type
-  error?: string; // For error messages from backend via websockets
+  indicators: IndicatorData;
+  error?: string;
+  message?: string;
 }
 
-// For historical API endpoint (GET /api/indicators/historical/)
 export interface HistoricalDataResponse {
     klines: Kline[];
-    indicators: IndicatorData; // Contains all indicator arrays and their timestamps
-    message?: string; // Optional informational message from backend
-    error?: string; // Optional error message string from backend
+    indicators: IndicatorData;
+    message?: string;
+    error?: string;
 }
 
-// Type for Signal Analysis API endpoint (GET /api/signals/analyze/)
 export interface SignalData {
   signal: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL' | 'ERROR' | 'LOADING' | null;
-  summary: string; // Textual summary of the signal
-  confidence: number | null; // Confidence score (e.g., 0.0 to 1.0), null if not applicable
-  details: Record<string, any>; // Flexible object for additional signal details (e.g., specific indicator values contributing to signal)
-  error?: string; // Optional error message if signal generation failed
+  summary: string;
+  confidence: number | null;
+  details: Record<string, any>;
+  error?: string;
+}
+
+export interface ArimaForecastData {
+    historical_timestamps: number[];
+    historical_values: (number | null)[];
+    forecast_timestamps: number[];
+    forecast_values: (number | null)[];
+    conf_int_lower: (number | null)[];
+    conf_int_upper: (number | null)[];
+    used_order?: string | number[]; // (p,d,q) or "default"
+    used_seasonal_order?: string | number[]; // (P,D,Q,s) or "default_or_none"
+    forecast_steps?: number;
+    message?: string;
+}
+
+export interface ArimaResponse extends ArimaForecastData {
+    symbol?: string;
+    interval?: string;
+    error?: string;
 }

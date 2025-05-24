@@ -1,4 +1,4 @@
-import { HistoricalDataResponse, SignalData } from '../types/marketData'; // Added SignalData
+import {ArimaResponse, HistoricalDataResponse, SignalData} from '../types/marketData'; // Added SignalData
 import axiosInstance, { isAxiosError } from "./axiosInstance";
 
 // Типи для запиту та відповіді ризик-менеджменту (потрібно узгодити з бекендом)
@@ -100,5 +100,39 @@ export const getSignalAnalysis = async (
             }
         }
         throw error; // Rethrow for generic error handling if needed
+    }
+};
+
+export const getArimaForecast = async (
+    symbol: string,
+    interval: string,
+    history_limit?: number,
+    forecast_steps?: number,
+    optimize?: boolean
+): Promise<ArimaResponse> => {
+    try {
+        const params: Record<string, string | number | boolean> = {
+            symbol,
+            interval,
+        };
+        if (history_limit) params.history_limit = history_limit;
+        if (forecast_steps) params.forecast_steps = forecast_steps;
+        if (optimize !== undefined) params.optimize = optimize;
+
+        const response = await axiosInstance.get<ArimaResponse>('/api/arima/forecast/', {
+            params,
+            timeout: 300000 // Increase timeout to 5 minutes (300000 ms) or more
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error('Error fetching ARIMA forecast:', error);
+        if (error.response && error.response.data) {
+            throw error.response.data;
+        }
+        // Check if the error is a timeout error specifically
+        if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
+            throw new Error('ARIMA forecast request timed out. The server is taking too long to respond.');
+        }
+        throw new Error('Failed to fetch ARIMA forecast');
     }
 };

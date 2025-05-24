@@ -286,7 +286,7 @@ class SignalAnalysisView(View):
             interval = interval_req
             logger.info(f"Analyzing signal for {symbol}, interval {interval}")
 
-            limit_for_signal = 200
+            limit_for_signal = 200  # Sufficient for most lookbacks in generate_trading_signals
             klines_data_or_error = get_futures_klines(symbol=symbol, interval=interval, limit=limit_for_signal)
 
             if isinstance(klines_data_or_error, dict) and 'error' in klines_data_or_error:
@@ -297,25 +297,30 @@ class SignalAnalysisView(View):
                      'error': error_msg}, status=502)
 
             if not klines_data_or_error or not isinstance(klines_data_or_error, list) or not klines_data_or_error:
+                logger.warning(f"Signal Analysis: No klines or invalid data for {symbol} {interval}")
                 return JsonResponse(
                     {'signal': 'ERROR', 'summary': "No kline data for signal.", 'confidence': 0, 'details': {},
-                     'error': "No klines."}, status=200)
+                     'error': "No klines received from connector."}, status=200)  # 200 if simply no data
 
             df = pd.DataFrame(klines_data_or_error)
             if df.empty:
+                logger.warning(f"Signal Analysis: Empty DataFrame for {symbol} {interval}")
                 return JsonResponse(
                     {'signal': 'ERROR', 'summary': "Empty DataFrame from klines for signal.", 'confidence': 0,
                      'details': {}, 'error': "Empty klines DataFrame."}, status=200)
 
             df.rename(columns={'open_time': 'timestamp'}, inplace=True, errors='ignore')
             if 'timestamp' not in df.columns:
+                logger.error(f"Signal Analysis: Timestamp column missing for {symbol} {interval}")
                 return JsonResponse(
-                    {'signal': 'ERROR', 'summary': 'Kline data structure error.', 'confidence': 0, 'details': {},
-                     'error': 'Missing timestamp.'}, status=500)
+                    {'signal': 'ERROR', 'summary': 'Kline data structure error (timestamp).', 'confidence': 0,
+                     'details': {},
+                     'error': 'Missing timestamp column in kline data.'}, status=500)
 
             required_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
             missing_cols = [col for col in required_cols if col not in df.columns]
             if missing_cols:
+                logger.error(f"Signal Analysis: Missing kline columns for {symbol} {interval}: {missing_cols}")
                 return JsonResponse(
                     {'signal': 'ERROR', 'summary': f"Malformed kline data (missing: {', '.join(missing_cols)}).",
                      'confidence': 0, 'details': {}, 'error': f"Missing columns: {', '.join(missing_cols)}."},
@@ -324,7 +329,9 @@ class SignalAnalysisView(View):
             for col in ['open', 'high', 'low', 'close', 'volume']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             df.dropna(subset=['timestamp', 'open', 'high', 'low', 'close'], inplace=True)
+
             if df.empty:
+                logger.warning(f"Signal Analysis: DataFrame empty after cleaning for {symbol} {interval}")
                 return JsonResponse(
                     {'signal': 'ERROR', 'summary': "No valid kline data after cleaning for signal.", 'confidence': 0,
                      'details': {}, 'error': 'No valid klines after cleaning.'}, status=200)
@@ -336,96 +343,144 @@ class SignalAnalysisView(View):
 
             if isinstance(indicator_values, dict) and 'error' in indicator_values:
                 error_msg = indicator_values['error']
-                logger.error(f"Signal Analysis: Indicator error for {symbol} {interval}: {error_msg}")
+                logger.error(f"Signal Analysis: Indicator calculation error for {symbol} {interval}: {error_msg}")
                 return JsonResponse(
                     {'signal': 'ERROR', 'summary': f"Indicator error: {error_msg}", 'confidence': 0, 'details': {},
                      'error': error_msg}, status=500)
 
             trading_signals_pd_series = generate_trading_signals(indicator_values, df.copy())
 
-            current_signal_val: str = "HOLD"
-            current_summary: str = "Market conditions appear neutral or signal is undetermined."
-            current_confidence: float = 0.50
-            signal_details: dict = {}
+            # Initialize with defaults from the strategy's typical HOLD state
+            signal_type_from_strategy = "HOLD"
+            signal_reliability = 0.10  # Default reliability for HOLD
+            signal_reason = "Neutral market conditions or no strong signal."
 
             if not trading_signals_pd_series.empty:
-                current_signal_val = trading_signals_pd_series.iloc[-1] if len(
-                    trading_signals_pd_series) > 0 else "HOLD"
+                last_signal_output = trading_signals_pd_series.iloc[-1]
+                if isinstance(last_signal_output, dict):
+                    signal_type_from_strategy = last_signal_output.get("type", "HOLD")
+                    signal_reliability = last_signal_output.get("reliability", 0.1)
+                    signal_reason = last_signal_output.get("reason", "No specific reason provided.")
+                else:
+                    logger.error(
+                        f"Signal Analysis: Last signal from strategy was not a dict for {symbol} {interval}: {last_signal_output}")
+                    signal_type_from_strategy = "ERROR"  # Mark as error if format is wrong
+                    signal_reason = "Internal error: Malformed signal data from strategy."
+                    signal_reliability = 0.0
+            else:
+                logger.warning(f"Signal Analysis: trading_signals_pd_series was empty for {symbol} {interval}")
+                signal_type_from_strategy = "ERROR"
+                signal_reason = "Internal error: No signals generated by strategy."
+                signal_reliability = 0.0
 
+            signal_details: dict = {}
             try:
-                rsi_key = 'rsi_14'
-                if indicator_values.get('rsi') and isinstance(indicator_values['rsi'], dict) and rsi_key in \
-                        indicator_values['rsi']:
-                    last_rsi_val = getValueSafe(indicator_values['rsi'][rsi_key], -1)
-                    if last_rsi_val is not None:
-                        signal_details[rsi_key] = round(last_rsi_val, 2)
-                        if last_rsi_val > 70:
-                            signal_details[f'{rsi_key}_level'] = "Overbought"
-                        elif last_rsi_val < 30:
-                            signal_details[f'{rsi_key}_level'] = "Oversold"
-                        else:
-                            signal_details[f'{rsi_key}_level'] = "Neutral"
+                # --- Populate signal_details with relevant indicator values ---
+                rsi_key_to_use = None
+                rsi_data_dict = indicator_values.get('rsi', {})
+                if rsi_data_dict:
+                    rsi_key_options = [f'rsi_{p}' for p in [14, 7, 21]]
+                    rsi_key_to_use = next((k for k in rsi_key_options if k in rsi_data_dict and rsi_data_dict[k]), None)
+                    if not rsi_key_to_use and rsi_data_dict: rsi_key_to_use = next(iter(rsi_data_dict), None)
 
-                macd_params_str = "12_26_9"
+                if rsi_key_to_use:
+                    last_rsi_val = getValueSafe(indicator_values['rsi'][rsi_key_to_use], -1)
+                    if last_rsi_val is not None:
+                        signal_details[rsi_key_to_use] = round(last_rsi_val, 2)
+                        if last_rsi_val > 70:
+                            signal_details[f'{rsi_key_to_use}_level'] = "Overbought"
+                        elif last_rsi_val < 30:
+                            signal_details[f'{rsi_key_to_use}_level'] = "Oversold"
+                        else:
+                            signal_details[f'{rsi_key_to_use}_level'] = "Neutral"
+
+                macd_params_str = "12_26_9"  # Default/common MACD params
                 macd_data_list = indicator_values.get('macd', [])
                 if isinstance(macd_data_list, list):
                     macd_set = next(
                         (m for m in macd_data_list if isinstance(m, dict) and m.get('params') == macd_params_str), None)
                     if macd_set:
-                        macd_line = getValueSafe(macd_set.get('macd_line', []), -1)
-                        signal_line = getValueSafe(macd_set.get('signal_line', []), -1)
-                        if macd_line is not None and signal_line is not None:
-                            signal_details['macd_value'] = f"M:{macd_line:.4f}, S:{signal_line:.4f}"
-                            prev_macd = getValueSafe(macd_set.get('macd_line', []), -2)
-                            prev_signal = getValueSafe(macd_set.get('signal_line', []), -2)
-                            if prev_macd is not None and prev_signal is not None:
-                                if macd_line > signal_line and prev_macd <= prev_signal:
-                                    signal_details['macd_cross'] = "Bullish"
-                                elif macd_line < signal_line and prev_macd >= prev_signal:
-                                    signal_details['macd_cross'] = "Bearish"
+                        macd_line_val = getValueSafe(macd_set.get('macd_line', []), -1)
+                        signal_line_val = getValueSafe(macd_set.get('signal_line', []), -1)
+                        hist_val = getValueSafe(macd_set.get('histogram', []), -1)
+                        if macd_line_val is not None and signal_line_val is not None:
+                            signal_details['macd_value'] = f"M:{macd_line_val:.4f}, S:{signal_line_val:.4f}"
+                        if hist_val is not None:
+                            signal_details['macd_histogram'] = round(hist_val, 4)
 
                 trend_status_data = indicator_values.get('trend_status', {})
                 current_trend = trend_status_data.get('current_trend', 'UNDETERMINED') if isinstance(trend_status_data,
                                                                                                      dict) else 'UNDETERMINED'
                 signal_details['current_trend'] = current_trend
 
-                if current_signal_val == "BUY":
-                    current_summary = f"Potential BUY for {symbol} ({interval}). Trend: {current_trend}."
-                    current_confidence = 0.60
-                    if current_trend == "UPTREND": current_confidence += 0.15
-                    if signal_details.get(f'{rsi_key}_level') == "Oversold": current_confidence += 0.10
-                    if signal_details.get('macd_cross') == "Bullish": current_confidence += 0.10
-                elif current_signal_val == "SELL":
-                    current_summary = f"Potential SELL for {symbol} ({interval}). Trend: {current_trend}."
-                    current_confidence = 0.60
-                    if current_trend == "DOWNTREND": current_confidence += 0.15
-                    if signal_details.get(f'{rsi_key}_level') == "Overbought": current_confidence += 0.10
-                    if signal_details.get('macd_cross') == "Bearish": current_confidence += 0.10
-                else:
-                    current_summary = f"HOLD for {symbol} ({interval}). Trend: {current_trend}. Conditions neutral/mixed."
-                    current_confidence = 0.40
-                    if current_trend == "FLAT": current_confidence += 0.1
+                last_adx_val = getValueSafe(indicator_values.get('adx_line', []), -1)
+                if last_adx_val is not None: signal_details['adx_value'] = round(last_adx_val, 2)
 
-                current_confidence = min(max(current_confidence, 0.05), 0.95)
+                last_vwap_val = getValueSafe(indicator_values.get('vwap_line', []), -1)
+                last_close_price = getValueSafe(df['close'].tolist(), -1)
+                if last_vwap_val is not None and last_close_price is not None:
+                    signal_details['vwap_value'] = round(last_vwap_val, 2)
+                    if last_close_price > last_vwap_val:
+                        signal_details['price_vs_vwap'] = "Above"
+                    elif last_close_price < last_vwap_val:
+                        signal_details['price_vs_vwap'] = "Below"
+                    else:
+                        signal_details['price_vs_vwap'] = "At"
+
+                # Add Ichimoku details
+                ichimoku_data = indicator_values.get('ichimoku_cloud', {})
+                if isinstance(ichimoku_data, dict):
+                    tk_val = getValueSafe(ichimoku_data.get('tenkan_sen', []), -1)
+                    kj_val = getValueSafe(ichimoku_data.get('kijun_sen', []), -1)
+                    sa_val = getValueSafe(ichimoku_data.get('senkou_span_a', []), -1)
+                    sb_val = getValueSafe(ichimoku_data.get('senkou_span_b', []), -1)
+                    cs_val = getValueSafe(ichimoku_data.get('chikou_span', []),
+                                          -1)  # Note: Chikou is usually compared to past price
+                    if tk_val is not None: signal_details['ichimoku_tenkan'] = round(tk_val, 4)
+                    if kj_val is not None: signal_details['ichimoku_kijun'] = round(kj_val, 4)
+                    if sa_val is not None and sb_val is not None and last_close_price is not None:
+                        if last_close_price > max(sa_val, sb_val):
+                            signal_details['price_vs_kumo'] = "Above Cloud"
+                        elif last_close_price < min(sa_val, sb_val):
+                            signal_details['price_vs_kumo'] = "Below Cloud"
+                        else:
+                            signal_details['price_vs_kumo'] = "Inside Cloud"
 
             except Exception as detail_err:
-                logger.error(f"Error during signal detail/summary for {symbol} {interval}: {detail_err}", exc_info=True)
-                signal_details['summary_error'] = str(detail_err)
+                logger.error(
+                    f"Signal Analysis: Error during signal detail enrichment for {symbol} {interval}: {detail_err}",
+                    exc_info=True)
+                signal_details['enrichment_error'] = str(detail_err)
 
-            valid_signals = ['STRONG_BUY', 'BUY', 'HOLD', 'SELL',
-                             'STRONG_SELL']  # Визначте STRONG_BUY/SELL у generate_trading_signals
-            final_signal = current_signal_val if current_signal_val in valid_signals else 'ERROR'
-            if final_signal == 'ERROR' or not current_signal_val:  # Якщо сигнал порожній або невалідний
-                final_signal = 'ERROR'
-                current_summary = "Error determining signal from strategy or invalid signal returned."
-                current_confidence = 0.0
+            # Determine final_signal ('STRONG_BUY', etc.) based on signal_type and signal_reliability
+            final_signal_str = signal_type_from_strategy
+
+            if signal_type_from_strategy == "BUY":
+                if signal_reliability >= 0.75: final_signal_str = "STRONG_BUY"
+                # No "weak" buy, just BUY if not strong
+            elif signal_type_from_strategy == "SELL":
+                if signal_reliability >= 0.75: final_signal_str = "STRONG_SELL"
+            elif signal_type_from_strategy == "ERROR":  # If strategy itself reported an error
+                final_signal_str = "ERROR"
+                signal_reason = signal_reason if signal_reason else "Error in signal generation strategy."
+                signal_reliability = 0.0
+
+            valid_frontend_signals = ['STRONG_BUY', 'BUY', 'HOLD', 'SELL', 'STRONG_SELL', 'ERROR']
+            if final_signal_str not in valid_frontend_signals:
+                logger.warning(
+                    f"Signal type '{final_signal_str}' from strategy/conversion is not a valid frontend signal. Defaulting to ERROR or HOLD.")
+                final_signal_str = "ERROR" if signal_type_from_strategy == "ERROR" else "HOLD"
 
             response_data = {
-                'signal': final_signal,
-                'summary': current_summary,
-                'confidence': round(current_confidence, 2),
-                'details': signal_details
+                'signal': final_signal_str,
+                'summary': signal_reason,
+                'confidence': round(signal_reliability, 2),
+                'details': signal_details,
+                'error': None if final_signal_str != "ERROR" else signal_reason  # Add error field if applicable
             }
+            if final_signal_str == "ERROR" and not response_data.get('error'):  # Ensure error key is set
+                response_data['error'] = signal_reason
+
             return JsonResponse(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
