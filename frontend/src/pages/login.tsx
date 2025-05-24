@@ -6,8 +6,9 @@ import { TextField, Button, Container, Typography, Box, Alert, CircularProgress,
 
 const LoginPage: React.FC = () => {
   const { t } = useTranslation();
-  const { login, isAuthenticated, loading, error: authError } = useAuth();
+  const { login, isAuthenticated, loading, error: authError, clearError } = useAuth();
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -18,29 +19,40 @@ const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  useEffect(() => {
+    if (authError) {
+      setFormError(authError);
+    } else {
+      setFormError(null); // Clear error if authError is null
+    }
+  }, [authError]);
+
+  useEffect(() => {
+    return () => {
+      clearError();
+    };
+  }, [clearError]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    clearError();
     setFormError(null);
-    if (!username || !password) {
+
+    if (!email || !password) {
       setFormError(t('loginPage.error.credentialsRequired'));
       return;
     }
     try {
-      await login({ username, password });
-      // Navigation is handled by the useEffect hook now
-    } catch (err) {
-      // The error is already set in AuthContext, but you might want to display it here
-      // or handle specific login errors if needed.
-      // authError will be updated by the login function in AuthContext.
-      // If the error from context isn't specific enough, setFormError here based on caught error.
-      setFormError(t('loginPage.error.invalidCredentials')); // Generic fallback
+      await login({ email, password });
+    } catch (err: any) {
+      setFormError(err.message || t('loginPage.error.invalidCredentials'));
     }
   };
 
   // Display context error if formError is not set
   const displayError = formError || authError;
 
-  if (loading && !displayError) { // Show loading spinner only if no error is present or not specifically a form submission loading
+  if (loading && !isAuthenticated && !displayError) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
         <CircularProgress />
@@ -62,8 +74,8 @@ const LoginPage: React.FC = () => {
         <Typography component="h1" variant="h5">
           {t('loginPage.title')}
         </Typography>
-        {displayError && (
-          <Alert severity="error" sx={{ width: '100%', mt: 2 }}>
+        {displayError && ( // displayError is formError
+          <Alert severity="error" sx={{ width: '100%', mt: 2 }} onClose={() => {setFormError(null); clearError();}}>
             {displayError}
           </Alert>
         )}
@@ -72,15 +84,15 @@ const LoginPage: React.FC = () => {
             margin="normal"
             required
             fullWidth
-            id="username"
-            label={t('loginPage.label.username')}
-            name="username"
-            autoComplete="username"
+            id="email"
+            label={t('loginPage.label.email')}
+            name="email"
+            autoComplete="email"
             autoFocus
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            error={!!formError && !username} // Example: highlight if formError and field empty
-            helperText={!!formError && !username ? t('loginPage.error.usernameRequired') : ''}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={!!formError}
+            helperText={!!formError && !email ? t('loginPage.error.emailRequired') : ''}
           />
           <TextField
             margin="normal"
@@ -93,7 +105,7 @@ const LoginPage: React.FC = () => {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            error={!!formError && !password}
+            error={!!formError}
             helperText={!!formError && !password ? t('loginPage.error.passwordRequired') : ''}
           />
           <Button
@@ -106,7 +118,7 @@ const LoginPage: React.FC = () => {
             {loading ? <CircularProgress size={24} /> : t('loginPage.button.login')}
           </Button>
           <Box textAlign="center">
-            <Link component={RouterLink} to="/signup" variant="body2">
+            <Link component={RouterLink} to="/sign-up" variant="body2">
               {t('loginPage.link.signUp')}
             </Link>
           </Box>

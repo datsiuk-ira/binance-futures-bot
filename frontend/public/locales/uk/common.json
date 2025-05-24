@@ -13,27 +13,8 @@
     "welcomeSubtitle": "Будь ласка, увійдіть або зареєструйтеся, щоб продовжити.",
     "goToDashboard": "Перейти до Панелі"
   },
-  "login": {
-    "title": "Вхід",
-    "submitButton": "Увійти",
-    "dontHaveAccount": "Немає облікового запису?",
-    "credentialErrorSuggestion": "Користувача не знайдено або невірний пароль. Немає облікового запису?",
-    "link": "Вхід",
-    "successful": "Вхід успішний!",
-    "emailDoesNotExistSuggestion": "Цей email не зареєстровано. Бажаєте створити обліковий запис?",
-    "failed": "Помилка входу. Перевірте ваші дані."
-  },
-  "signUp": {
-    "title": "Реєстрація",
-    "submitButton": "Зареєструватися",
-    "alreadyHaveAccount": "Вже є обліковий запис?",
-    "link": "Реєстрація",
-    "success": "Реєстрація успішна! Ви увійшли до системи.",
-    "emailExistsSuggestion": "Цей email вже зареєстровано. Бажаєте увійти?",
-    "successfulAndLoggedIn": "Реєстрація успішна! Ви увійшли в систему.",
-    "successfulPleaseLogin": "Реєстрація успішна! Будь ласка, увійдіть.",
-    "failedDefault": "Помилка реєстрації. Будь ласка, спробуйте знову."
-  },
+  "login": "Логін",
+  "signUp": "Реєстрація",
   "form": {
     "emailLabel": "Адреса електронної пошти",
     "passwordLabel": "Пароль",
@@ -50,31 +31,7 @@
     "passwordsDoNotMatch": "Паролі не співпадають.",
     "fieldRequired": "Це поле обов'язкове"
   },
-  "Profile": "Профіль",
-  "profile": {
-    "title": "Профіль користувача",
-    "welcome": "Ласкаво просимо, {{email}}!",
-    "logoutButton": "Вийти",
-    "id": "ID",
-    "email": "Електронна пошта",
-    "firstName": "Ім'я",
-    "lastName": "Прізвище",
-    "dateJoined": "Дата реєстрації",
-    "lastLogin": "Останній вхід",
-    "balance": "Баланс",
-    "leverage": "Кредитне плече",
-    "riskPerTrade": "Ризик на угоду",
-    "tradeMode": "Режим торгівлі",
-    "apiKeyConfigured": "Налаштовано",
-    "apiKeyNotConfigured": "Не налаштовано",
-    "errorLoading": "Не вдалося завантажити дані профілю.",
-    "logoutSuccess": "Ви успішно вийшли з облікового запису.",
-    "apiKeyStatus": "Статус API ключа",
-    "errorLoadingFallback": "Щось пішло не так під час завантаження даних профілю.",
-    "updateProfileButton": "Оновити профіль",
-    "updateSuccess": "Профіль успішно оновлено!",
-    "updateFailed": "Не вдалося оновити профіль."
-  },
+  "profile": "Профіль",
   "dashboardPage": {
     "title": "Інформаційна панель ринкових даних (Binance Futures Testnet)",
     "symbolLabel": "Символ",
@@ -176,6 +133,7 @@
   "loginPage.title": "Увійти",
   "loginPage.label.username": "Ім'я користувача",
   "loginPage.label.password": "Пароль",
+  "loginPage.label.email": "Email",
   "loginPage.button.login": "Увійти",
   "loginPage.link.signUp": "Немає облікового запису? Зареєструватися",
   "loginPage.error.credentialsRequired": "Ім'я користувача та пароль обов'язкові.",
@@ -212,6 +170,8 @@
   "profilePage.title": "Профіль користувача",
   "profilePage.label.username": "Ім'я користувача",
   "profilePage.label.email": "Електронна пошта",
+  "profilePage.label.firstName": "Ім'я",
+  "profilePage.label.lastName": "Прізвище",
   "profilePage.loading": "Завантаження профілю...",
   "profilePage.error": "Не вдалося завантажити профіль.",
   "profilePage.link.dashboard": "Назад до панелі приладів",
@@ -340,5 +300,7 @@
   "dashboard.riskCalc.errors.clientError": "Помилка на стороні клієнта при відправці розрахунку ризику.",
   "dashboard.errors.noKlineData": "Не отримано дані свічок для {{symbol}} на {{interval}}.",
   "dashboard.errors.unknownChartError": "Невідома помилка завантаження даних графіка.",
-  "dashboard.errors.fetchSignalError": "Не вдалося завантажити аналіз сигналів."
+  "dashboard.errors.fetchSignalError": "Не вдалося завантажити аналіз сигналів.",
+  "common.cancel": "Скасувати",
+  "common.save": "Зберегти зміни"
 }

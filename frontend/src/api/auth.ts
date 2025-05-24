@@ -5,6 +5,16 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export interface UpdateUserPayload {
+    username?: string;
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    updated_at?: string;
 }
 
 export interface LoginCredentials {
@@ -94,5 +104,21 @@ export const fetchUserProfileAfterLogin = async (token: string): Promise<User | 
     } catch (error) {
         console.error('Failed to fetch user profile after login:', error);
         return null;
+    }
+};
+
+export const apiUpdateUserProfile = async (userData: UpdateUserPayload, token: string): Promise<User> => {
+    try {
+        // Ensure the Authorization header is set for this specific request if not globally.
+        // axiosInstance already has interceptors to add the token, but for clarity:
+        const response = await axiosInstance.patch<User>('/users/profile/', userData, { // Assuming PATCH to /api/users/profile/
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("API Update User Profile error:", error.response || error.message);
+        throw error.response?.data || new Error('User profile update failed');
     }
 };

@@ -10,7 +10,9 @@ import {
     TokenResponse,
     SignUpCredentials,
     SignUpResponse,
-    fetchUserProfileAfterLogin
+    fetchUserProfileAfterLogin,
+    UpdateUserPayload,
+    apiUpdateUserProfile
 } from "../src/api/auth";
 
 export const useAuth = (): AuthContextType => {
@@ -29,6 +31,7 @@ interface AuthContextType {
     login: (credentials: LoginCredentials) => Promise<void>;
     logout: () => void;
     register: (credentials: SignUpCredentials) => Promise<void>;
+    updateUser: (userData: UpdateUserPayload) => Promise<User | null>;
     loading: boolean;
     error: string | null;
     clearError: () => void;
@@ -112,24 +115,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const register = async (credentials: SignUpCredentials): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-        const response = await apiRegister(credentials);
-
-        await login({
-            email: credentials.email,
-            password: credentials.password
-        });
-
-    } catch (err: any) {
-        const errorMessage = err.detail || err.message || 'Registration failed';
-        setError(errorMessage);
-        throw new Error(errorMessage);
-    } finally {
-        setLoading(false);
-    }
-};
+        setLoading(true);
+        setError(null);
+        try {
+            await apiRegister(credentials);
+        } catch (err: any) {
+            const errorMessage = err.message || err?.detail || err?.response?.data?.detail || 'Registration failed';
+            setError(errorMessage);
+            setIsAuthenticated(false);
+            setUser(null);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            if (axiosInstance.defaults.headers.common['Authorization']) {
+                delete axiosInstance.defaults.headers.common['Authorization'];
+            }
+            throw new Error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const logout = () => {
         localStorage.removeItem('token');
@@ -145,8 +149,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setError(null);
     };
 
+    const updateUser = async (userData: UpdateUserPayload): Promise<User | null> => {
+        if (!token) {
+            setError("Not authenticated for updating profile.");
+            return null;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            const updatedUser = await apiUpdateUserProfile(userData, token);
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            return updatedUser;
+        } catch (err: any) {
+            const errorMessage = err.message || err?.detail || 'Profile update failed.';
+            setError(errorMessage);
+            return null;
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ isAuthenticated, user, token, login, logout, register, loading, error, clearError }}>
+        <AuthContext.Provider value={{ isAuthenticated, user, token, login, logout, register, loading, error, updateUser, clearError }}>
             {!loading && children}
         </AuthContext.Provider>
     );

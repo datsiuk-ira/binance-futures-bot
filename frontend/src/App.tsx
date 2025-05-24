@@ -18,15 +18,17 @@ import ProfilePage from './pages/profile';
 import PrivateRoute from './components/PrivateRoute';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import { Box, CircularProgress } from '@mui/material';
+import Header from "./components/Header";
 
-function App() {
+interface AppProps {
+  toggleTheme: () => void;
+}
+
+function App({ toggleTheme }: AppProps) {
   return (
-    // ThemeProvider, CssBaseline, Router (BrowserRouter), and AuthProvider are now in main.tsx
-    // So, App.tsx focuses on the Routes and layout within that context.
     <>
-      <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 1300 }}>
-        <LanguageSwitcher />
-      </Box>
+      <Header toggleTheme={toggleTheme} /> {/* Added Header component */}
+      {/* Removed redundant LanguageSwitcher Box that was here */}
       <Suspense fallback={
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
           <CircularProgress />
@@ -34,23 +36,17 @@ function App() {
       }>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-
-          {/* Protected Routes */}
+          <Route path="/signup" element={<SignUpPage />} /> // Corrected path from /sign-up to /signup as per Header.tsx
           <Route element={<PrivateRoute />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/profile" element={<ProfilePage />} />
-            {/* Add other private routes here */}
           </Route>
-
-          {/* Redirect root to dashboard if authenticated, otherwise to login */}
           <Route
             path="/"
             element={
               <Navigate replace to="/dashboard" />
             }
           />
-          {/* Fallback for any other route */}
           <Route path="*" element={<Navigate replace to="/" />} />
         </Routes>
       </Suspense>

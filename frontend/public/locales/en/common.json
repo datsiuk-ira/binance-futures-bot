@@ -13,27 +13,8 @@
     "welcomeSubtitle": "Please login or sign up to continue.",
     "goToDashboard": "Go to Dashboard"
   },
-  "login": {
-    "title": "Login",
-    "submitButton": "Login",
-    "dontHaveAccount": "Don't have an account?",
-    "credentialErrorSuggestion": "User not found or incorrect password. Don't have an account?",
-    "link": "Login",
-    "successful": "Login successful!",
-    "emailDoesNotExistSuggestion": "This email is not registered. Would you like to create an account?",
-    "failed": "Login failed. Please check your credentials."
-  },
-  "signUp": {
-    "title": "Sign Up",
-    "submitButton": "Sign Up",
-    "alreadyHaveAccount": "Already have an account?",
-    "link": "Sign Up",
-    "success": "Registration successful! You are logged in.",
-    "emailExistsSuggestion": "This email is already registered. Would you like to log in?",
-    "successfulAndLoggedIn": "Registration successful! You are logged in.",
-    "successfulPleaseLogin": "Registration successful! Please log in.",
-    "failedDefault": "Registration failed. Please try again."
-  },
+  "login": "Login",
+  "signUp": "Sign Up",
   "form": {
     "emailLabel": "Email Address",
     "passwordLabel": "Password",
@@ -50,31 +31,7 @@
     "passwordsDoNotMatch": "Passwords do not match.",
     "fieldRequired": "This field is required"
   },
-  "Profile": "Profile",
-  "profile": {
-    "title": "User Profile",
-    "welcome": "Welcome, {{email}}!",
-    "logoutButton": "Logout",
-    "id": "ID",
-    "email": "Email",
-    "firstName": "First Name",
-    "lastName": "Last Name",
-    "dateJoined": "Date Joined",
-    "lastLogin": "Last Login",
-    "balance": "Balance",
-    "leverage": "Leverage",
-    "riskPerTrade": "Risk per Trade",
-    "tradeMode": "Trading Mode",
-    "apiKeyConfigured": "Configured",
-    "apiKeyNotConfigured": "Not Configured",
-    "errorLoading": "Failed to load profile data.",
-    "logoutSuccess": "You have successfully logged out.",
-    "apiKeyStatus": "API Key Status",
-    "errorLoadingFallback": "Something went wrong while loading profile data.",
-    "updateProfileButton": "Update Profile",
-    "updateSuccess": "Profile updated successfully!",
-    "updateFailed": "Failed to update profile."
-  },
+  "profile": "Profile",
   "dashboardPage": {
     "title": "Market Data Dashboard (Binance Futures Testnet)",
     "symbolLabel": "Symbol",
@@ -176,6 +133,7 @@
   "loginPage.title": "Sign In",
   "loginPage.label.username": "Username",
   "loginPage.label.password": "Password",
+  "loginPage.label.email": "Email",
   "loginPage.button.login": "Login",
   "loginPage.link.signUp": "Don't have an account? Sign Up",
   "loginPage.error.credentialsRequired": "Username and password are required.",
@@ -212,6 +170,8 @@
   "profilePage.title": "User Profile",
   "profilePage.label.username": "Username",
   "profilePage.label.email": "Email",
+  "profilePage.label.firstName": "First Name",
+  "profilePage.label.lastName": "Last Name",
   "profilePage.loading": "Loading profile...",
   "profilePage.error": "Failed to load profile.",
   "profilePage.link.dashboard": "Back to Dashboard",
@@ -340,5 +300,7 @@
   "dashboard.riskCalc.errors.clientError": "Client-side error during risk calculation submission.",
   "dashboard.errors.noKlineData": "No kline data received for {{symbol}} on {{interval}}.",
   "dashboard.errors.unknownChartError": "Unknown error loading chart data.",
-  "dashboard.errors.fetchSignalError": "Could not fetch signal analysis."
+  "dashboard.errors.fetchSignalError": "Could not fetch signal analysis.",
+  "common.cancel": "Cancel",
+  "common.save": "Save Changes"
 }
