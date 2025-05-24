@@ -1,149 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { loginUser as apiLoginUser, signUpUser as apiSignUpUser, logoutUser as apiLogoutUser, fetchUserProfile } from '../src/api/auth';
-import { useNavigate } from 'react-router-dom';
+import React, {createContext, useState, useEffect, ReactNode, useContext} from 'react';
 
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  // Add other user properties as needed
-}
-
-export interface AuthData {
-  username?: string;
-  email?: string;
-  password?: string;
-}
-
-export interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  user: User;
-  message?: string;
-}
-
-export interface SignUpResponse {
-  message: string;
-  user?: User; // Optional: depends on your API response for signup
-}
-
-interface AuthContextType {
-  isAuthenticated: boolean;
-  user: User | null;
-  login: (userData: AuthData) => Promise<void>;
-  signUp: (userData: AuthData) => Promise<SignUpResponse>;
-  logout: () => Promise<void>;
-  loading: boolean;
-  error: string | null;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const initializeAuth = async () => {
-      setLoading(true);
-      const token = localStorage.getItem('accessToken');
-      const storedUser = localStorage.getItem('user');
-
-      if (token) {
-        try {
-          // Option 1: Trust stored user data if available
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
-            setIsAuthenticated(true);
-          } else {
-          // Option 2: Or always fetch profile to validate token and get fresh user data
-            const fetchedUser = await fetchUserProfile();
-            if (fetchedUser) {
-              setUser(fetchedUser);
-              setIsAuthenticated(true);
-            } else {
-              // Token might be invalid or expired
-              await apiLogoutUser(); // Clears local storage
-              setIsAuthenticated(false);
-              setUser(null);
-            }
-          }
-        } catch (e) {
-          console.error("Initialization error:", e);
-          await apiLogoutUser(); // Clears local storage
-          setIsAuthenticated(false);
-          setUser(null);
-        }
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-      setLoading(false);
-    };
-    initializeAuth();
-  }, []);
-
-  const login = async (userData: AuthData) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiLoginUser(userData);
-      setUser(data.user);
-      setIsAuthenticated(true);
-      // The navigation should happen in the component after successful login
-      // navigate('/dashboard'); // Avoid navigation directly in context
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
-      setIsAuthenticated(false);
-      setUser(null);
-      throw err; // Re-throw to allow component to handle it
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signUp = async (userData: AuthData): Promise<SignUpResponse> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await apiSignUpUser(userData);
-      // Depending on your flow, you might log the user in or just show a success message
-      // For now, we assume signup doesn't auto-login.
-      return response;
-    } catch (err: any) {
-      setError(err.message || 'Sign up failed. Please try again.');
-      throw err; // Re-throw to allow component to handle it
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const logout = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await apiLogoutUser(); // This handles clearing localStorage
-    } catch (err: any) {
-      // Log error but still proceed with client-side logout
-      console.error("Logout API call failed:", err);
-      setError(err.message || 'Logout failed on server, but cleared locally.');
-    } finally {
-      setUser(null);
-      setIsAuthenticated(false);
-      setLoading(false);
-      navigate('/login'); // Navigate to login after logout
-    }
-  };
-
-  return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, signUp, logout, loading, error }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+import axiosInstance from "../src/api/axiosInstance";
+import {
+    login as apiLogin,
+    register as apiRegister,
+    logout as apiLogout,
+    LoginCredentials,
+    User,
+    TokenResponse,
+    SignUpCredentials,
+    SignUpResponse,
+    fetchUserProfileAfterLogin
+} from "../src/api/auth";
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
@@ -151,4 +19,135 @@ export const useAuth = (): AuthContextType => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+};
+
+
+interface AuthContextType {
+    isAuthenticated: boolean;
+    user: User | null; // Додаємо поле user
+    token: string | null;
+    login: (credentials: LoginCredentials) => Promise<void>;
+    logout: () => void;
+    register: (credentials: SignUpCredentials) => Promise<void>;
+    loading: boolean;
+    error: string | null;
+    clearError: () => void;
+}
+
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+    const [user, setUser] = useState<User | null>(null); // Стан для користувача
+    const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+    const [loading, setLoading] = useState<boolean>(true); // Початкове завантаження для перевірки токена
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const storedToken = localStorage.getItem('token');
+        const storedUserString = localStorage.getItem('user');
+
+        if (storedToken) {
+            setToken(storedToken);
+            axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+            setIsAuthenticated(true);
+            if (storedUserString) {
+                try {
+                    setUser(JSON.parse(storedUserString));
+                } catch (e) {
+                    console.error("Failed to parse stored user:", e);
+                    localStorage.removeItem('user');
+                }
+            } else {
+                const fetchUser = async () => {
+                    const profile = await fetchUserProfileAfterLogin(storedToken);
+                    if (profile) {
+                        setUser(profile);
+                        localStorage.setItem('user', JSON.stringify(profile));
+                    } else {
+                        logout();
+                    }
+                };
+                fetchUser();
+            }
+        }
+        setLoading(false);
+    }, []);
+
+    const login = async (credentials: LoginCredentials): Promise<void> => {
+        setLoading(true);
+        setError(null);
+        try {
+            const data: TokenResponse = await apiLogin(credentials);
+            localStorage.setItem('token', data.access);
+            setToken(data.access);
+            axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${data.access}`;
+
+            let currentUser = data.user || null;
+            if (!currentUser && data.access) {
+                 currentUser = await fetchUserProfileAfterLogin(data.access);
+            }
+
+            if (currentUser) {
+                setUser(currentUser);
+                localStorage.setItem('user', JSON.stringify(currentUser));
+            } else {
+                 console.warn("Login successful, but user data could not be fully loaded/retrieved.");
+            }
+            setIsAuthenticated(true);
+        } catch (err: any) {
+            const errorMessage = err?.response?.data?.detail || err?.message || 'Login failed due to an unknown error.';
+            setError(errorMessage);
+            setIsAuthenticated(false);
+            setUser(null);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            if (axiosInstance.defaults.headers.common['Authorization']) {
+                delete axiosInstance.defaults.headers.common['Authorization'];
+            }
+            throw new Error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const register = async (credentials: SignUpCredentials): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+        const response = await apiRegister(credentials);
+
+        await login({
+            email: credentials.email,
+            password: credentials.password
+        });
+
+    } catch (err: any) {
+        const errorMessage = err.detail || err.message || 'Registration failed';
+        setError(errorMessage);
+        throw new Error(errorMessage);
+    } finally {
+        setLoading(false);
+    }
+};
+
+    const logout = () => {
+        localStorage.removeItem('token');
+        // localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        setToken(null);
+        setUser(null);
+        delete axiosInstance.defaults.headers.common['Authorization'];
+        setIsAuthenticated(false);
+    };
+
+    const clearError = () => {
+        setError(null);
+    };
+
+    return (
+        <AuthContext.Provider value={{ isAuthenticated, user, token, login, logout, register, loading, error, clearError }}>
+            {!loading && children}
+        </AuthContext.Provider>
+    );
 };

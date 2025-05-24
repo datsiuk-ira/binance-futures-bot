@@ -1,62 +1,98 @@
+// frontend/src/api/auth.ts
 import axiosInstance from './axiosInstance';
-import { AuthData, LoginResponse, SignUpResponse, User } from '../../context/AuthContext';
 
-export const loginUser = async (userData: AuthData): Promise<LoginResponse> => {
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+}
+
+export interface LoginCredentials {
+  username?: string;
+  password?: string;
+  email?: string;
+}
+
+export interface SignUpCredentials extends LoginCredentials {
+  password2?: string;
+}
+
+export interface TokenResponse {
+  access: string;
+  refresh?: string;
+  user?: User;
+}
+
+export interface SignUpResponse {
+  message?: string;
+  user?: User;
+}
+
+export const login = async (credentials: LoginCredentials): Promise<TokenResponse> => {
   try {
-    const response = await axiosInstance.post<LoginResponse>('/users/login/', userData);
-    if (response.data.access_token && response.data.user) {
-      localStorage.setItem('accessToken', response.data.access_token);
-      localStorage.setItem('refreshToken', response.data.refresh_token); // Assuming you also get a refresh token
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+    const response = await axiosInstance.post<TokenResponse>('/api/users/login/', credentials);
+    if (response.data.access && !response.data.user) {
+        try {
+            const userProfile = await fetchUserProfileAfterLogin(response.data.access);
+            if (userProfile !== null) {
+                response.data.user = userProfile;
+            }
+        } catch (profileError) {
+            console.warn("Login successful, but failed to fetch user profile immediately.", profileError);
+        }
+    }
+
+    if (response.data.access) {
+        localStorage.setItem('token', response.data.access);
+        if (response.data.user) {
+            localStorage.setItem('user', JSON.stringify(response.data.user));
+        }
     }
     return response.data;
   } catch (error: any) {
-    console.error('Login failed:', error.response?.data || error.message);
-    throw error.response?.data || new Error('Login failed');
+    console.error('Login API error:', error.response?.data || error.message);
+    throw error.response?.data || new Error('Login API request failed');
   }
 };
 
-export const signUpUser = async (userData: AuthData): Promise<SignUpResponse> => {
+export const register = async (credentials: SignUpCredentials): Promise<SignUpResponse> => { // SignUpResponse або відповідний тип
   try {
-    const response = await axiosInstance.post<SignUpResponse>('/users/register/', userData);
-    // Typically, registration might not automatically log in the user or return tokens.
-    // If it does, handle tokens similar to loginUser.
+    const response = await axiosInstance.post<SignUpResponse>('/users/register/', credentials);
     return response.data;
   } catch (error: any) {
-    console.error('Sign up failed:', error.response?.data || error.message);
-    throw error.response?.data || new Error('Sign up failed');
+    console.error('Sign up API error:', error.response?.data || error.message);
+    throw error.response?.data || new Error('Sign up API request failed');
   }
 };
 
-export const logoutUser = async (): Promise<void> => {
+export const logout = async (): Promise<void> => {
   try {
-    // Assuming you have a backend logout endpoint that might invalidate tokens
-    // await axiosInstance.post('/users/logout/');
+    await axiosInstance.post('/users/logout/');
   } catch (error: any) {
-    console.error('Logout failed:', error.response?.data || error.message);
-    // Even if backend logout fails, clear client-side data
+    console.error('Logout API error:', error.response?.data || error.message);
   } finally {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
+    delete axiosInstance.defaults.headers.common['Authorization'];
   }
 };
 
-export const fetchUserProfile = async (): Promise<User | null> => {
-  try {
-    const response = await axiosInstance.get<{ user: User }>('/users/profile/');
-    if (response.data && response.data.user) {
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      return response.data.user;
+export const fetchUserProfileAfterLogin = async (token: string): Promise<User | null> => {
+    try {
+        const response = await axiosInstance.get<{ user: User } | User>('/users/me/', { // Припускаємо ендпоінт /users/me/
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+        if ('user' in response.data && typeof response.data.user === 'object') {
+             return response.data.user as User;
+        } else if ('id' in response.data && 'username' in response.data) {
+            return response.data as User;
+        }
+        console.warn("User profile response format unexpected:", response.data);
+        return null;
+    } catch (error) {
+        console.error('Failed to fetch user profile after login:', error);
+        return null;
     }
-    return null;
-  } catch (error) {
-    console.error('Failed to fetch user profile:', error);
-    // If profile fetch fails (e.g. token expired), clear local storage
-    // to prevent an inconsistent state.
-    if ((error as any).response?.status === 401) {
-        await logoutUser(); // Or simply clear storage items
-    }
-    return null;
-  }
 };

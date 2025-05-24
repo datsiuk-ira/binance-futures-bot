@@ -36,15 +36,15 @@ class MarketDataKlinesView(APIView):
             '1M': BinanceAPIClient.KLINE_INTERVAL_1MONTH,
         }
 
-        req_interval_str = request.GET.get('interval', '1h')
+        req_interval_str = request.GET.get('interval', '1m')
         interval = interval_map.get(req_interval_str, BinanceAPIClient.KLINE_INTERVAL_1MINUTE)
 
         try:
-            limit = int(request.GET.get('limit', 20))
+            limit = int(request.GET.get('limit', 50))
             if limit <= 0 or limit > 1500: # Binance має обмеження на кількість klines
-                limit = 20 
+                limit = 200
         except ValueError:
-            limit = 20
+            limit = 200
 
         # Отримуємо символ з URL, робимо його верхнім регістром
         symbol_upper = symbol.upper()

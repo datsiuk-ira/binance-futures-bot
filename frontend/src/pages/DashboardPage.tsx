@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {
     Box, Container, Typography, Paper, CircularProgress, TextField,
     FormControlLabel, Switch, Select, MenuItem, InputLabel, FormControl, Button, Stack, ToggleButtonGroup, ToggleButton, useTheme, Chip
@@ -8,16 +8,19 @@ import { getHistoricalIndicators, calculateRiskManagementOnBackend, RiskCalculat
 import { UTCTimestamp } from 'lightweight-charts';
 import { Kline, IndicatorData as BackendIndicatorData, HistoricalDataResponse, MACDParams, BollingerBandsParams, SignalData } from '../types/marketData';
 import { alpha } from '@mui/material/styles';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 // Icons for Buy/Sell and Info
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import {isAxiosError} from "axios"; // For Hold/Error signal
+import {isAxiosError} from "axios";
+import {useTranslation} from "react-i18next"; // For Hold/Error signal
 
 
 const DashboardPage: React.FC = () => {
+    const { t } = useTranslation();
     const [marketData, setMarketData] = useState<ProcessedChartData[]>([]);
     const [loadingChart, setLoadingChart] = useState<boolean>(true); // Renamed for clarity
     const [loadingRiskCalc, setLoadingRiskCalc] = useState<boolean>(false);
@@ -27,7 +30,7 @@ const DashboardPage: React.FC = () => {
 
 
     const [symbol, setSymbol] = useState<string>('BTCUSDT');
-    const [interval, setInterval] = useState<string>('1h');
+    const [interval, setInterval] = useState<string>('1m');
     const [limit, setLimit] = useState<number>(300); // Increased default limit slightly
 
     // Indicator toggles
@@ -56,14 +59,18 @@ const DashboardPage: React.FC = () => {
 
     // Signal Analysis state
     const [signalData, setSignalData] = useState<SignalData | null>(null);
+    const [lastSignalUpdate, setLastSignalUpdate] = useState<Date | null>(null);
 
     const theme = useTheme();
+    const chartUpdateIntervalRef = useRef<number | null>(null);
 
     const availableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'DOTUSDT', 'MATICUSDT', 'LINKUSDT', 'TRXUSDT', 'LTCUSDT', 'BCHUSDT', 'ATOMUSDT'];
     const availableIntervals = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'];
 
-    const fetchChartData = useCallback(async () => {
-        setLoadingChart(true);
+    const fetchChartData = useCallback(async (isAutoUpdate = false) => {
+        if (!isAutoUpdate) { // Не показуємо головний лоадер для автооновлень
+            setLoadingChart(true);
+        }
         setChartError(null);
         try {
             const response: HistoricalDataResponse = await getHistoricalIndicators(symbol, interval, limit);
@@ -89,7 +96,6 @@ const DashboardPage: React.FC = () => {
                 let rsiValue: number | undefined;
 
                 if (indicatorIndex !== -1) {
-                    // Standard indicator keys (must match backend configuration)
                     if (indicators.sma) maValue = getValue(indicators.sma['sma_20'], indicatorIndex);
                     if (indicators.ema) emaValue = getValue(indicators.ema['ema_50'], indicatorIndex);
 
@@ -115,17 +121,13 @@ const DashboardPage: React.FC = () => {
                 return { time: (klineTimestampMs / 1000) as UTCTimestamp, open: kline.open, high: kline.high, low: kline.low, close: kline.close, ma: maValue, ema: emaValue, bollingerBands: bbValues, macd: macdValues, rsi: rsiValue };
             });
             setMarketData(chartableData);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to fetch chart data:", error);
-            // Check if the error is an AxiosError and has response data which might be an HTML page (like 500 error page)
-            if (isAxiosError(error) && error.response && typeof error.response.data === 'string' && error.response.data.startsWith('<!DOCTYPE html>')) {
-                 setChartError(`Server error (${error.response.status}). Check backend logs for details.`);
-            } else {
-                setChartError(error instanceof Error ? error.message : "Unknown error loading chart data.");
-            }
+            const errorMessage = error.message || t('dashboard.errors.unknownChartError');
+            setChartError(errorMessage);
             setMarketData([]);
         } finally {
-            setLoadingChart(false);
+            if (!isAutoUpdate) setLoadingChart(false);
         }
     }, [symbol, interval, limit]);
 
@@ -135,19 +137,36 @@ const DashboardPage: React.FC = () => {
         try {
             const data = await getSignalAnalysis(symbol, interval);
             setSignalData(data);
+            setLastSignalUpdate(new Date());
         } catch (err) {
             console.error("Failed to fetch signal analysis:", err);
-            setSignalData({ signal: "ERROR", summary: "Could not fetch signal analysis.", confidence: 0, details: {} });
+            setSignalData({ signal: "ERROR", summary: t('dashboard.errors.fetchSignalError'), confidence: 0, details: {} });
+            setLastSignalUpdate(new Date());
         } finally {
             setLoadingSignal(false);
         }
-    }, [symbol, interval]);
-
+    }, [symbol, interval, t]);
 
     useEffect(() => {
         fetchChartData();
         fetchSignalData();
-    }, [fetchChartData, fetchSignalData]); // Dependencies updated
+    }, [fetchChartData, fetchSignalData]);
+
+    useEffect(() => {
+        if (chartUpdateIntervalRef.current) {
+            clearInterval(chartUpdateIntervalRef.current);
+        }
+        chartUpdateIntervalRef.current = window.setInterval(() => {
+            console.log("Auto-refreshing chart data...");
+            fetchChartData(true);
+        }, 2000);
+
+        return () => {
+            if (chartUpdateIntervalRef.current) {
+                clearInterval(chartUpdateIntervalRef.current);
+            }
+        };
+    }, [fetchChartData]);
 
     const handlePositionSideChange = (event: React.MouseEvent<HTMLElement>, newPositionSide: 'BUY' | 'SELL' | null) => {
         if (newPositionSide !== null) {
@@ -241,40 +260,42 @@ const DashboardPage: React.FC = () => {
     return (
         <Container maxWidth={false} sx={{ mt: 2, mb: 4, padding: { xs: 1, sm: 2 } }}>
             <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', color: theme.palette.text.primary, mb:3 }}>
-                Trading Dashboard
+                {t('dashboard.title', 'Trading Dashboard')}
             </Typography>
 
+            {/* Controls Section */}
             <Paper elevation={2} sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 3, backgroundColor: theme.palette.background.paper }}>
                  <Stack direction={{xs: 'column', lg: 'row'}} spacing={2} alignItems="center">
                     <Stack direction={{xs: 'column', sm: 'row'}} spacing={2} sx={{flexGrow: 3, width: '100%'}} alignItems="center">
                         <FormControl sx={{flex: 1, minWidth: '130px'}}>
-                            <InputLabel id="symbol-select-label">Symbol</InputLabel>
-                            <Select labelId="symbol-select-label" value={symbol} label="Symbol" onChange={(e) => setSymbol(e.target.value as string)}>
+                            <InputLabel id="symbol-select-label">{t('dashboard.controls.symbol', 'Symbol')}</InputLabel>
+                            <Select labelId="symbol-select-label" value={symbol} label={t('dashboard.controls.symbol', 'Symbol')} onChange={(e) => setSymbol(e.target.value as string)}>
                                 {availableSymbols.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                             </Select>
                         </FormControl>
                         <FormControl sx={{flex: 1, minWidth: '120px'}}>
-                            <InputLabel id="interval-select-label">Interval</InputLabel>
-                            <Select labelId="interval-select-label" value={interval} label="Interval" onChange={(e) => setInterval(e.target.value as string)}>
+                            <InputLabel id="interval-select-label">{t('dashboard.controls.interval', 'Interval')}</InputLabel>
+                            <Select labelId="interval-select-label" value={interval} label={t('dashboard.controls.interval', 'Interval')} onChange={(e) => setInterval(e.target.value as string)}>
                                 {availableIntervals.map(i => <MenuItem key={i} value={i}>{i}</MenuItem>)}
                             </Select>
                         </FormControl>
                         <TextField
                             sx={{flex: 1, minWidth: '120px'}}
-                            label="Candle Limit" type="number" value={limit}
+                            label={t('dashboard.controls.candleLimit', 'Candle Limit')} type="number" value={limit}
                             onChange={(e) => { const val = parseInt(e.target.value, 10); setLimit(Math.max(10, Math.min(1500, val)) || 200);}}
                             InputProps={{ inputProps: { min: 10, max: 1500 } }}/>
+                        {/* Кнопка "Load Data" тепер оновлює все */}
                         <Button variant="contained" onClick={() => { fetchChartData(); fetchSignalData();}} disabled={loadingChart || loadingSignal} sx={{ height: '56px', px: {xs: 2, sm:3}, width: {xs: '100%', sm: 'auto'} }}>
-                            {(loadingChart || loadingSignal) ? <CircularProgress size={24} color="inherit" /> : "Load Data"}
+                            {(loadingChart || loadingSignal) ? <CircularProgress size={24} color="inherit" /> : t('dashboard.controls.loadData', 'Load Data')}
                         </Button>
                     </Stack>
                     <Stack direction="row" spacing={{xs: 0.5, sm:1}} flexWrap="wrap" justifyContent={{xs: 'center', lg:'flex-end'}} alignItems="center" sx={{flexGrow: 2, width: '100%', mt: {xs:2, lg:0}}}>
-                        <Typography variant="body2" sx={{mr:1, display: {xs:'none', sm:'block'}}}>Indicators:</Typography>
-                        <FormControlLabel control={<Switch size="small" checked={showMA} onChange={(e) => setShowMA(e.target.checked)} />} label="MA" sx={{mr:0}}/>
-                        <FormControlLabel control={<Switch size="small" checked={showEMA} onChange={(e) => setShowEMA(e.target.checked)} />} label="EMA" sx={{mr:0}}/>
-                        <FormControlLabel control={<Switch size="small" checked={showBollingerBands} onChange={(e) => setShowBollingerBands(e.target.checked)} />} label="BB" sx={{mr:0}}/>
-                        <FormControlLabel control={<Switch size="small" checked={showMACD} onChange={(e) => setShowMACD(e.target.checked)} />} label="MACD" sx={{mr:0}}/>
-                        <FormControlLabel control={<Switch size="small" checked={showRSI} onChange={(e) => setShowRSI(e.target.checked)} />} label="RSI" />
+                        <Typography variant="body2" sx={{mr:1, display: {xs:'none', sm:'block'}}}>{t('dashboard.indicators.title', 'Indicators')}:</Typography>
+                        <FormControlLabel control={<Switch size="small" checked={showMA} onChange={(e) => setShowMA(e.target.checked)} />} label={t('dashboard.indicators.ma', 'MA')} sx={{mr:0}}/>
+                        <FormControlLabel control={<Switch size="small" checked={showEMA} onChange={(e) => setShowEMA(e.target.checked)} />} label={t('dashboard.indicators.ema', 'EMA')} sx={{mr:0}}/>
+                        <FormControlLabel control={<Switch size="small" checked={showBollingerBands} onChange={(e) => setShowBollingerBands(e.target.checked)} />} label={t('dashboard.indicators.bb', 'BB')} sx={{mr:0}}/>
+                        <FormControlLabel control={<Switch size="small" checked={showMACD} onChange={(e) => setShowMACD(e.target.checked)} />} label={t('dashboard.indicators.macd', 'MACD')} sx={{mr:0}}/>
+                        <FormControlLabel control={<Switch size="small" checked={showRSI} onChange={(e) => setShowRSI(e.target.checked)} />} label={t('dashboard.indicators.rsi', 'RSI')} />
                     </Stack>
                 </Stack>
             </Paper>
@@ -286,10 +307,10 @@ const DashboardPage: React.FC = () => {
             }
 
             <Paper elevation={3} sx={{ p: 0, mb: 3, backgroundColor: theme.palette.background.default, overflow: 'hidden', minHeight: 700 }}>
-                {loadingChart && !marketData.length ? (
+                 {loadingChart && !marketData.length && !chartError ? ( // Показуємо лоадер тільки якщо немає даних І НЕМАЄ ПОМИЛКИ
                     <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: '650px' }}>
                         <CircularProgress size={60} />
-                        <Typography variant="h6" sx={{mt: 2}}>Loading Chart Data...</Typography>
+                        <Typography variant="h6" sx={{mt: 2}}>{t('dashboard.chart.loading', 'Loading Chart Data...')}</Typography>
                     </Box>
                 ) : marketData.length > 0 ? (
                     <KlineChart
@@ -302,102 +323,109 @@ const DashboardPage: React.FC = () => {
                         showMACD={showMACD}
                         showRSI={showRSI}
                     />
-                ) : (
+                ) : ( // Якщо не завантажується і немає даних (можливо, через помилку або порожню відповідь)
                      !loadingChart &&
                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: '650px' }}>
-                        <Typography variant="h6">No data to display. Please check symbol/interval or ensure the backend is working correctly.</Typography>
+                        <Typography variant="h6">
+                            {chartError ? t('dashboard.chart.errorPlaceholder', 'Error loading chart. Check console or error message above.') : t('dashboard.chart.noDataPlaceholder', 'No data to display. Check parameters or backend.')}
+                        </Typography>
                      </Box>
                 )}
             </Paper>
 
             {/* Signal Analysis Section */}
             <Paper elevation={2} sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 3, backgroundColor: theme.palette.background.paper }}>
-                <Typography variant="h6" component="h2" gutterBottom>Signal Analysis ({symbol} @ {interval})</Typography>
-                {loadingSignal ? (
-                    <Box sx={{display: 'flex', alignItems: 'center', minHeight: '50px'}}> <CircularProgress size={24} sx={{mr:1}}/> <Typography>Loading signal analysis...</Typography></Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
+                    <Typography variant="h6" component="h2">
+                        {t('dashboard.signalAnalysis.title', 'Signal Analysis')} ({symbol} @ {interval})
+                    </Typography>
+                    <Button
+                        onClick={() => fetchSignalData()}
+                        disabled={loadingSignal}
+                        size="small"
+                        startIcon={loadingSignal ? <CircularProgress size={16} /> : <RefreshIcon />}
+                    >
+                        {t('dashboard.signalAnalysis.refresh', 'Refresh')}
+                    </Button>
+                </Box>
+                {loadingSignal && !signalData ? ( // Показуємо лоадер тільки якщо немає попередніх даних
+                    <Box sx={{display: 'flex', alignItems: 'center', minHeight: '50px'}}> <CircularProgress size={24} sx={{mr:1}}/> <Typography>{t('dashboard.signalAnalysis.loading', 'Loading signal analysis...')}</Typography></Box>
                 ) : signalData ? (
                     <Stack spacing={1}>
                         <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
-                             <Typography variant="subtitle1" sx={{fontWeight: 'bold'}}>Current Signal:</Typography>
+                             <Typography variant="subtitle1" sx={{fontWeight: 'bold'}}>{t('dashboard.signalAnalysis.currentSignal', 'Current Signal')}:</Typography>
                              <Chip
                                 icon={getSignalChipProperties(signalData.signal).icon}
-                                label={signalData.signal?.replace('_', ' ') || "N/A"}
+                                label={signalData.signal ? t(`dashboard.signalAnalysis.signals.${signalData.signal.toLowerCase()}`, signalData.signal.replace('_', ' ')) : t('common.na', 'N/A')}
                                 color={getSignalChipProperties(signalData.signal).color}
-                                size="medium" // Made chip slightly larger
+                                size="medium"
                              />
-                             {signalData.confidence != null && (
-                                  <Chip
-                                    label={`Confidence: ${(signalData.confidence * 100).toFixed(0)}%`}
-                                    size="small"
-                                    variant="outlined"
-                                  />
-                             )}
+                             {signalData.confidence != null && <Chip label={`${t('dashboard.signalAnalysis.confidence', 'Confidence')}: ${(signalData.confidence * 100).toFixed(0)}%`} size="small" variant="outlined" />}
                         </Box>
-                        <Typography variant="body1" sx={{fontStyle: 'italic'}}>Summary: {signalData.summary || "No summary available."}</Typography>
+                        <Typography variant="body1" sx={{fontStyle: 'italic'}}>{t('dashboard.signalAnalysis.summary', 'Summary')}: {signalData.summary || t('dashboard.signalAnalysis.noSummary', 'No summary available.')}</Typography>
                         {signalData.details && Object.keys(signalData.details).length > 0 && (
                              <Box mt={1}>
-                                <Typography variant="body2" sx={{fontWeight: 'medium'}}>Details:</Typography>
+                                <Typography variant="body2" sx={{fontWeight: 'medium'}}>{t('dashboard.signalAnalysis.details', 'Details')}:</Typography>
                                 <Paper variant="outlined" sx={{p:1.5, background: alpha(theme.palette.grey[500], 0.05)}}>
                                 <Stack spacing={0.5}>
                                 {Object.entries(signalData.details).map(([key, value]) => (
-                                    <Typography key={key} variant="caption">{`${key}: ${value}`}</Typography>
+                                    <Typography key={key} variant="caption">{`${t(`dashboard.signalAnalysis.detailKeys.${key}`, key)}: ${value}`}</Typography>
                                 ))}
                                 </Stack>
                                 </Paper>
                              </Box>
                         )}
+                        {lastSignalUpdate && (
+                            <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'right', mt: 1 }}>
+                                {t('dashboard.signalAnalysis.lastUpdated', 'Last updated')}: {lastSignalUpdate.toLocaleTimeString()}
+                            </Typography>
+                        )}
                     </Stack>
                 ) : (
-                    <Typography>No signal analysis data available.</Typography>
+                    <Typography>{t('dashboard.signalAnalysis.noData', 'No signal analysis data available.')}</Typography>
                 )}
             </Paper>
 
 
             <Paper elevation={2} sx={{ p: { xs: 1.5, sm: 2.5 }, backgroundColor: theme.palette.background.paper }}>
-                <Typography variant="h6" component="h2" gutterBottom>Risk Management Calculator ({symbol})</Typography>
+                <Typography variant="h6" component="h2" gutterBottom>{t('dashboard.riskCalc.title', 'Risk Management Calculator')} ({symbol})</Typography>
                 <Stack spacing={2.5}>
                     <ToggleButtonGroup
-                        value={positionSide}
-                        exclusive
-                        onChange={handlePositionSideChange}
-                        aria-label="position side"
-                        fullWidth
-                        color="primary"
-                        sx={{ mb: 1 }}
-                    >
+                        value={positionSide} exclusive onChange={handlePositionSideChange}
+                        aria-label="position side" fullWidth color="primary" sx={{ mb: 1 }} >
                         <ToggleButton value="BUY" aria-label="buy side" sx={{flexGrow:1, '&.Mui-selected': {color: theme.palette.success.main, backgroundColor: alpha(theme.palette.success.main, 0.12)}, '&:hover':{backgroundColor: alpha(theme.palette.success.main, 0.05)}}}>
-                            <TrendingUpIcon sx={{mr:1}}/> Buy / Long
+                            <TrendingUpIcon sx={{mr:1}}/> {t('dashboard.riskCalc.buyLong', 'Buy / Long')}
                         </ToggleButton>
                         <ToggleButton value="SELL" aria-label="sell side" sx={{flexGrow:1, '&.Mui-selected': {color: theme.palette.error.main, backgroundColor: alpha(theme.palette.error.main, 0.12)}, '&:hover':{backgroundColor: alpha(theme.palette.error.main, 0.05)}}}>
-                            <TrendingDownIcon sx={{mr:1}}/> Sell / Short
+                            <TrendingDownIcon sx={{mr:1}}/> {t('dashboard.riskCalc.sellShort', 'Sell / Short')}
                         </ToggleButton>
                     </ToggleButtonGroup>
 
                     <Stack direction={{xs: 'column', md: 'row'}} spacing={2}>
-                        <TextField fullWidth label="Account Balance (USD)" value={accountBalance} onChange={e=> setAccountBalance(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "100", min: "0" } }}/>
-                        <TextField fullWidth label="Risk per Trade (%)" value={riskPercent} onChange={e => setRiskPercent(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "0.1", min:"0.1", max:"100" } }}/>
-                        <TextField fullWidth label="Leverage (x)" value={leverage} onChange={e => setLeverage(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "1", min:"1", max:"125" } }}/>
+                        <TextField fullWidth label={t('dashboard.riskCalc.accountBalance', 'Account Balance (USD)')} value={accountBalance} onChange={e=> setAccountBalance(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "100", min: "0" } }}/>
+                        <TextField fullWidth label={t('dashboard.riskCalc.riskPerTrade', 'Risk per Trade (%)')} value={riskPercent} onChange={e => setRiskPercent(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "0.1", min:"0.1", max:"100" } }}/>
+                        <TextField fullWidth label={t('dashboard.riskCalc.leverage', 'Leverage (x)')} value={leverage} onChange={e => setLeverage(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "1", min:"1", max:"125" } }}/>
                     </Stack>
                     <Stack direction={{xs: 'column', md: 'row'}} spacing={2}>
-                        <TextField fullWidth label="Entry Price" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "any", min: "0" } }}/>
-                        <TextField fullWidth label="Stop Loss Price" value={stopLossPrice} onChange={e => setStopLossPrice(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "any", min: "0" } }}/>
-                        <TextField fullWidth label="Take Profit Price (Optional)" value={takeProfitPrice} onChange={e => setTakeProfitPrice(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "any", min: "0" } }}/>
+                        <TextField fullWidth label={t('dashboard.riskCalc.entryPrice', 'Entry Price')} value={entryPrice} onChange={e => setEntryPrice(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "any", min: "0" } }}/>
+                        <TextField fullWidth label={t('dashboard.riskCalc.stopLossPrice', 'Stop Loss Price')} value={stopLossPrice} onChange={e => setStopLossPrice(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "any", min: "0" } }}/>
+                        <TextField fullWidth label={t('dashboard.riskCalc.takeProfitPrice', 'Take Profit Price (Optional)')} value={takeProfitPrice} onChange={e => setTakeProfitPrice(e.target.value)} type="number" sx={{flex:1}} InputProps={{ inputProps: { step: "any", min: "0" } }}/>
                     </Stack>
                     <Button variant="contained" color="primary" onClick={handleCalculateRisk} disabled={loadingRiskCalc} sx={{ mt: 2, mb:1, alignSelf: {xs: 'stretch', sm:'flex-start'} }}>
-                        {loadingRiskCalc ? <CircularProgress size={24} color="inherit"/> : "Calculate Position"}
+                        {loadingRiskCalc ? <CircularProgress size={24} color="inherit"/> : t('dashboard.riskCalc.calculateButton', 'Calculate Position')}
                     </Button>
 
                     {riskCalcError && <Typography color="error" sx={{mt:1, fontSize: '0.875rem'}}>{riskCalcError}</Typography>}
 
                     <Box sx={{mt: 1.5, p:2, border: `1px solid ${theme.palette.divider}`, borderRadius: 1, background: alpha(theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100], 0.5)}}>
-                        <Typography variant="subtitle1" component="h3" gutterBottom sx={{color: theme.palette.primary.main, fontWeight:'medium'}}>Calculation Results:</Typography>
+                        <Typography variant="subtitle1" component="h3" gutterBottom sx={{color: theme.palette.primary.main, fontWeight:'medium'}}>{t('dashboard.riskCalc.resultsTitle', 'Calculation Results')}:</Typography>
                         <Stack spacing={0.8}>
-                           <Typography>Position Size (Asset): <strong style={{color: theme.palette.text.primary}}>{positionSizeAsset}</strong></Typography>
-                           <Typography>Position Size (USD): <strong style={{color: theme.palette.text.primary}}>{positionSizeUSD}</strong></Typography>
-                           <Typography>Est. Potential Loss (on SL): <strong style={{color: theme.palette.error.main}}>{potentialLoss}</strong></Typography>
-                           <Typography>Est. Potential Profit (on TP): <strong style={{color: theme.palette.success.main}}>{potentialProfit}</strong></Typography>
-                           <Typography>Risk/Reward Ratio: <strong style={{color: theme.palette.text.primary}}>{riskRewardRatio}</strong></Typography>
-                           <Typography>Est. Liquidation Price: <strong style={{color: theme.palette.warning.dark}}>{liquidationPrice}</strong></Typography>
+                           <Typography>{t('dashboard.riskCalc.positionSizeAsset', 'Position Size (Asset)')}: <strong style={{color: theme.palette.text.primary}}>{positionSizeAsset}</strong></Typography>
+                           <Typography>{t('dashboard.riskCalc.positionSizeUSD', 'Position Size (USD)')}: <strong style={{color: theme.palette.text.primary}}>{positionSizeUSD}</strong></Typography>
+                           <Typography>{t('dashboard.riskCalc.potentialLoss', 'Est. Potential Loss (on SL)')}: <strong style={{color: theme.palette.error.main}}>{potentialLoss}</strong></Typography>
+                           <Typography>{t('dashboard.riskCalc.potentialProfit', 'Est. Potential Profit (on TP)')}: <strong style={{color: theme.palette.success.main}}>{potentialProfit}</strong></Typography>
+                           <Typography>{t('dashboard.riskCalc.riskRewardRatio', 'Risk/Reward Ratio')}: <strong style={{color: theme.palette.text.primary}}>{riskRewardRatio}</strong></Typography>
+                           <Typography>{t('dashboard.riskCalc.liquidationPrice', 'Est. Liquidation Price')}: <strong style={{color: theme.palette.warning.dark}}>{liquidationPrice}</strong></Typography>
                         </Stack>
                     </Box>
                 </Stack>
