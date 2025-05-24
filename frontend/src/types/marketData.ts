@@ -52,28 +52,40 @@ export interface VolatilityStatus {
 }
 
 export interface IndicatorData {
-  timestamps: number[];
+  timestamps: number[]; // Timestamps corresponding to the indicator values arrays
   rsi?: RSIValues;
   ema?: EMAValues;
   sma?: SMAValues;
-  macd?: MACDParams[];
-  bollinger_bands?: BollingerBandsParams[];
+  macd?: MACDParams[]; // Array because backend might send multiple MACD sets (though unlikely for this app)
+  bollinger_bands?: BollingerBandsParams[]; // Array for same reason
   adx?: ADXValues;
   trend_status?: TrendStatus;
   volatility?: VolatilityStatus;
+  // Add other indicators as needed, matching backend structure
 }
 
 export interface MarketDataMessage {
-  type: 'kline_with_indicators' | 'error'; // Added error type
+  type: 'kline_with_indicators' | 'error'; // Added error type for websockets
   symbol: string;
   interval: string;
   klines: Kline[];
-  indicators: IndicatorData;
-  error?: string; // For error messages from backend
+  indicators: IndicatorData; // This is the detailed IndicatorData type
+  error?: string; // For error messages from backend via websockets
 }
 
-// For historical API endpoint
+// For historical API endpoint (GET /api/indicators/historical/)
 export interface HistoricalDataResponse {
     klines: Kline[];
-    indicators: IndicatorData;
+    indicators: IndicatorData; // Contains all indicator arrays and their timestamps
+    message?: string; // Optional informational message from backend
+    error?: string; // Optional error message string from backend
+}
+
+// Type for Signal Analysis API endpoint (GET /api/signals/analyze/)
+export interface SignalData {
+  signal: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL' | 'ERROR' | 'LOADING' | null;
+  summary: string; // Textual summary of the signal
+  confidence: number | null; // Confidence score (e.g., 0.0 to 1.0), null if not applicable
+  details: Record<string, any>; // Flexible object for additional signal details (e.g., specific indicator values contributing to signal)
+  error?: string; // Optional error message if signal generation failed
 }

@@ -1,6 +1,6 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, isAxiosError as axiosIsAxiosErrorCheck } from 'axios'; // Import AxiosError and the type guard
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://localhost:8000';
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -10,10 +10,10 @@ const axiosInstance = axios.create({
   },
 });
 
-// Request interceptor to add the auth token to headers
+// Add a request interceptor to include the token
 axiosInstance.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('accessToken');
+  (config) => {
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -24,55 +24,22 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle token refresh
+// Optional: Add a response interceptor for global error handling (e.g., 401 Unauthorized)
 axiosInstance.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    // Check if it's a 401 error, not a retry request, and the error is not from the refresh token endpoint itself
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && originalRequest.url !== '/users/token/refresh/') {
-      originalRequest._retry = true; // Mark that we've tried to refresh
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          // No refresh token, logout or redirect to login
-          // Potentially call logout function from AuthContext or emit an event
-          console.warn('No refresh token available for renewal.');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('user');
-          // window.location.href = '/login'; // Force redirect
-          return Promise.reject(error);
-        }
-
-        const response = await axios.post(`${API_BASE_URL}/users/token/refresh/`, {
-          refresh: refreshToken,
-        });
-
-        const { access } = response.data;
-        localStorage.setItem('accessToken', access);
-
-        // Update the header for the original request
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${access}`;
-        }
-
-        // Retry the original request with the new token
-        return axiosInstance(originalRequest);
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        // Refresh failed, logout user
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        // Potentially call logout function from AuthContext or emit an event
-        // window.location.href = '/login'; // Force redirect
-        return Promise.reject(refreshError); // Or the original error
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      // Handle 401 - e.g., redirect to login, clear token
+      console.error("Unauthorized request - 401. Potentially redirect to login.");
+      if (window.location.pathname !== '/login') { // Avoid redirect loop
+         window.location.href = '/login';
       }
     }
     return Promise.reject(error);
   }
 );
 
+// Export the type guard for use in other service files
+export const isAxiosError = axiosIsAxiosErrorCheck;
 
 export default axiosInstance;
