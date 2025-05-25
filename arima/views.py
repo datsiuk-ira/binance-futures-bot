@@ -15,7 +15,7 @@ from indicators.technical_indicators import _convert_numpy_types_for_serializati
 
 logger = logging.getLogger(__name__)
 
-ARIMA_MAX_HISTORICAL_KLINES = getattr(settings, 'ARIMA_MAX_HISTORICAL_KLINES', 500)
+ARIMA_MAX_HISTORICAL_KLINES = getattr(settings, 'ARIMA_MAX_HISTORICAL_KLINES', 100)
 ARIMA_MIN_HISTORICAL_KLINES = getattr(settings, 'ARIMA_MIN_HISTORICAL_KLINES', 50)
 
 
@@ -110,8 +110,8 @@ class ArimaForecastView(View):
             seasonality_period_m = 1
 
             if interval.endswith('m'):
-                # seasonality_period_m = 15
-                pass
+                seasonality_period_m = 15
+                # pass
             elif interval.endswith('h'):
                 seasonality_period_m = 24
             elif interval.endswith('d'):

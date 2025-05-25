@@ -13,9 +13,9 @@ from statsmodels.tsa.stattools import adfuller
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ARIMA_ORDER = (5, 1, 0)
+DEFAULT_ARIMA_ORDER = (1, 1, 1)
 DEFAULT_SEASONAL_ORDER = (0, 0, 0, 0)
-FORECAST_STEPS = 10
+FORECAST_STEPS = 30
 
 
 # get_stationarity function can be kept if you plan to use it for 'd' or 'D' determination later
@@ -113,9 +113,9 @@ def find_best_arima_order(series: pd.Series,
 
 
 def optimize_arima_order(series: pd.Series,
-                         start_p=0, max_p=3,
+                         start_p=0, max_p=1,
                          start_q=0, max_q=2,
-                         d_range=(0, 2),
+                         d_range=(0, 1),
                          start_P=0, max_P=1,
                          start_Q=0, max_Q=1,
                          D_range=(0, 1),
@@ -124,7 +124,6 @@ def optimize_arima_order(series: pd.Series,
                          trace=False,
                          error_action='ignore', suppress_warnings=True,
                          stepwise=True):
-
     if series.empty or len(series) < 20:
         logger.warning(
             "ARIMA: Insufficient data for optimization process. Default values will be used.")
